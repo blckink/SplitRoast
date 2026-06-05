@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    SplitPlay.Steam
+    Everything related to discovering Steam, its libraries, installed games and
+    their artwork. Targets net8.0-windows because it reads the Windows registry
+    to locate the Steam install. All Steam file formats (VDF/ACF) are parsed by
+    the small self-contained parser under Vdf/.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <RootNamespace>SplitPlay.Steam</RootNamespace>
+    <AssemblyName>SplitPlay.Steam</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SplitPlay.Core\SplitPlay.Core.csproj" />
+  </ItemGroup>
+
+</Project>

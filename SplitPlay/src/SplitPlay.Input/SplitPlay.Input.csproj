@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    SplitPlay.Input
+    Controller discovery and (later) per-instance input routing. The MVP uses
+    XInput, which models up to four Xbox-style pads at fixed user indices 0-3 -
+    exactly the model we need to bind one pad to one game window.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <RootNamespace>SplitPlay.Input</RootNamespace>
+    <AssemblyName>SplitPlay.Input</AssemblyName>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SplitPlay.Core\SplitPlay.Core.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    SplitPlay.App
+    The WPF presentation layer (.NET 8). Holds the views, view models and the
+    composition root (dependency injection). All real work is delegated to the
+    feature modules, which it references but does not reimplement.
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <RootNamespace>SplitPlay.App</RootNamespace>
+    <AssemblyName>SplitPlay</AssemblyName>
+    <UseWPF>true</UseWPF>
+    <!-- Enables System.Windows.Forms.Screen for robust multi-monitor enumeration. -->
+    <UseWindowsForms>true</UseWindowsForms>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon></ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SplitPlay.Core\SplitPlay.Core.csproj" />
+    <ProjectReference Include="..\SplitPlay.Steam\SplitPlay.Steam.csproj" />
+    <ProjectReference Include="..\SplitPlay.Input\SplitPlay.Input.csproj" />
+    <ProjectReference Include="..\SplitPlay.Launch\SplitPlay.Launch.csproj" />
+  </ItemGroup>
+
+</Project>
