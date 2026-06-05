@@ -1,12 +1,13 @@
 using System;
 using System.Runtime.InteropServices;
+using System.Text;
 
 namespace SplitPlay.Launch.Native;
 
 /// <summary>
-/// P/Invoke declarations for the Win32 calls used to turn a game window into a
-/// borderless window placed in a specific screen region. Isolated here so the
-/// higher-level <see cref="WindowManager"/> stays readable.
+/// P/Invoke declarations for the Win32 calls used to find game windows and turn
+/// them into borderless windows placed in a specific screen region. Isolated here
+/// so the higher-level classes stay readable.
 /// </summary>
 internal static class User32
 {
@@ -27,6 +28,12 @@ internal static class User32
     public const uint SWP_FRAMECHANGED = 0x0020;
     public const uint SWP_SHOWWINDOW = 0x0040;
 
+    // ShowWindow commands.
+    public const int SW_RESTORE = 9;
+    public const int SW_SHOW = 5;
+
+    public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
     [DllImport("user32.dll", SetLastError = true)]
     public static extern IntPtr GetWindowLongPtr(IntPtr hWnd, int nIndex);
 
@@ -45,5 +52,26 @@ internal static class User32
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool IsWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool IsWindowVisible(IntPtr hWnd);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
+    [DllImport("user32.dll")]
+    public static extern int GetWindowTextLength(IntPtr hWnd);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    public static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
 }

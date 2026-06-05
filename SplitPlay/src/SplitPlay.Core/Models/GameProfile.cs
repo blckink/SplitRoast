@@ -44,6 +44,13 @@ public sealed class GameProfile
     /// </summary>
     public string? ExecutableOverride { get; set; }
 
+    /// <summary>
+    /// When true, the launch engine opens neutral placeholder test windows instead
+    /// of the real game. Useful to verify the split layout, display choice and
+    /// window placement safely without starting the game.
+    /// </summary>
+    public bool UseTestWindows { get; set; }
+
     /// <summary>Creates a fresh profile with default settings for an app id.</summary>
     public static GameProfile CreateDefault(uint appId) => new() { AppId = appId };
 }

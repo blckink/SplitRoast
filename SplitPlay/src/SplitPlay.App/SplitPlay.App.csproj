@@ -27,6 +27,33 @@
     <ProjectReference Include="..\SplitPlay.Steam\SplitPlay.Steam.csproj" />
     <ProjectReference Include="..\SplitPlay.Input\SplitPlay.Input.csproj" />
     <ProjectReference Include="..\SplitPlay.Launch\SplitPlay.Launch.csproj" />
+
+    <!--
+      The test-window helper is a separate executable. We reference it only to
+      force it to build before the app (ReferenceOutputAssembly=false: we do not
+      compile against it); it is then bundled into the app output by the
+      BundleTestTarget target below so the launch engine can find and start it.
+    -->
+    <ProjectReference Include="..\SplitPlay.TestTarget\SplitPlay.TestTarget.csproj"
+                      ReferenceOutputAssembly="false"
+                      Private="false" />
   </ItemGroup>
+
+  <!--
+    Copies the full TestTarget build output (exe + dll + runtimeconfig + deps) into
+    a "TestTarget" subfolder of the app output. A .NET executable needs all of
+    these files, so we copy the whole folder rather than just the .exe.
+  -->
+  <Target Name="BundleTestTarget" AfterTargets="Build">
+    <PropertyGroup>
+      <TestTargetOutDir>$(MSBuildThisFileDirectory)..\SplitPlay.TestTarget\bin\$(Configuration)\net8.0-windows\</TestTargetOutDir>
+    </PropertyGroup>
+    <ItemGroup>
+      <TestTargetFiles Include="$(TestTargetOutDir)**\*.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(TestTargetFiles)"
+          DestinationFiles="@(TestTargetFiles->'$(OutDir)TestTarget\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+  </Target>
 
 </Project>

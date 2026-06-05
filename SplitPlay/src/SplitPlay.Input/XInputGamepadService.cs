@@ -4,7 +4,6 @@ using System.Linq;
 using System.Timers;
 using SplitPlay.Core.Abstractions;
 using SplitPlay.Core.Models;
-using SplitPlay.Input.Native;
 using Timer = System.Timers.Timer;
 
 namespace SplitPlay.Input;
@@ -12,7 +11,8 @@ namespace SplitPlay.Input;
 /// <summary>
 /// XInput-backed <see cref="IGamepadService"/>. Polls connection state on a light
 /// background timer and raises <see cref="GamepadsChanged"/> only when the set of
-/// connected pads actually changes, so the UI updates without busy work.
+/// connected pads actually changes, so the UI updates without busy work. Live
+/// state reads and rumble go straight through <see cref="XInputReader"/>.
 /// </summary>
 public sealed class XInputGamepadService : IGamepadService
 {
@@ -23,7 +23,7 @@ public sealed class XInputGamepadService : IGamepadService
 
     private readonly Timer _timer;
     private readonly object _gate = new();
-    private bool[] _connected = new bool[XInput.MaxControllers];
+    private bool[] _connected = new bool[XInputReader.MaxControllers];
     private bool _disposed;
 
     public XInputGamepadService()
@@ -42,7 +42,7 @@ public sealed class XInputGamepadService : IGamepadService
     {
         lock (_gate)
         {
-            return Enumerable.Range(0, XInput.MaxControllers)
+            return Enumerable.Range(0, XInputReader.MaxControllers)
                 .Where(i => _connected[i])
                 .Select(i => new GamepadInfo { UserIndex = i, IsConnected = true })
                 .ToList();
@@ -52,6 +52,11 @@ public sealed class XInputGamepadService : IGamepadService
     public void StartMonitoring() => _timer.Start();
 
     public void StopMonitoring() => _timer.Stop();
+
+    public GamepadState ReadState(int userIndex) => XInputReader.ReadState(userIndex);
+
+    public void SetVibration(int userIndex, double leftMotor, double rightMotor) =>
+        XInputReader.SetVibration(userIndex, leftMotor, rightMotor);
 
     private void OnPollTick(object? sender, ElapsedEventArgs e)
     {
@@ -66,10 +71,10 @@ public sealed class XInputGamepadService : IGamepadService
     /// </summary>
     private bool RefreshState()
     {
-        var current = new bool[XInput.MaxControllers];
-        for (int i = 0; i < XInput.MaxControllers; i++)
+        var current = new bool[XInputReader.MaxControllers];
+        for (int i = 0; i < XInputReader.MaxControllers; i++)
         {
-            current[i] = XInput.IsConnected(i);
+            current[i] = XInputReader.IsConnected(i);
         }
 
         lock (_gate)
@@ -94,5 +99,11 @@ public sealed class XInputGamepadService : IGamepadService
         _disposed = true;
         _timer.Elapsed -= OnPollTick;
         _timer.Dispose();
+
+        // Make sure no controller is left rumbling when we shut down.
+        for (int i = 0; i < XInputReader.MaxControllers; i++)
+        {
+            XInputReader.SetVibration(i, 0, 0);
+        }
     }
 }

@@ -8,10 +8,15 @@ fork lives under `../Master` as reference). The goals are a friendlier UI, a
 modular and individually-updatable codebase, and **per-game configuration through
 the interface** instead of downloading and managing handler script files.
 
-> Status: **MVP foundation.** The full UI, Steam detection, controller detection
-> and per-game profiles are in place. The launch engine is a clearly-defined
-> interface with a preview stub (`StubLaunchEngine`); the real, OS-level launch
-> pipeline drops in behind the same interface next.
+> Status: **Testable MVP.** Scanning, the full UI, controller detection + rumble
+> test, and per-game profiles work. **Start** launches the game executable twice,
+> finds each window, makes it borderless and tiles it into the chosen split on the
+> chosen display; if a second instance can't get its own window (single-instance
+> games) the affected half falls back to a SplitPlay **test window**. A **Test
+> mode** opens placeholder windows only, to verify layout safely.
+>
+> Not yet done (next milestone): **isolating controller input per window** (one pad
+> → one window). Today both windows receive input from all pads.
 
 ## Scope (MVP)
 
@@ -35,7 +40,8 @@ updated on its own. Dependencies only ever point *toward* `Core`.
 | `SplitPlay.Core` | `net8.0` | Domain models, abstractions (interfaces), pure layout math. No UI/OS deps — unit-testable. |
 | `SplitPlay.Steam` | `net8.0-windows` | Locate Steam, parse libraries (`libraryfolders.vdf`) and manifests (`appmanifest_*.acf`), resolve artwork (local cache → Steam CDN fallback). |
 | `SplitPlay.Input` | `net8.0-windows` | XInput controller discovery + connect/disconnect monitoring. |
-| `SplitPlay.Launch` | `net8.0-windows` | Win32 borderless window placement + the launch engine (MVP stub). |
+| `SplitPlay.Launch` | `net8.0-windows` | Process launch, window locating + borderless placement, the real launch engine. |
+| `SplitPlay.TestTarget` | `net8.0-windows` | Tiny WinForms test window (placeholder + live controller readout) bundled with the app. |
 | `SplitPlay.App` | `net8.0-windows` | WPF presentation: views, view models, DI composition root. |
 
 ```
@@ -45,8 +51,10 @@ SplitPlay/
 └─ src/
    ├─ SplitPlay.Core/           # Models/, Abstractions/, Services/
    ├─ SplitPlay.Steam/          # Vdf/, scanner, artwork
-   ├─ SplitPlay.Input/          # Native/XInput, gamepad service
-   ├─ SplitPlay.Launch/         # Native/User32, WindowManager, StubLaunchEngine
+   ├─ SplitPlay.Input/          # Native/XInput, XInputReader, gamepad service
+   ├─ SplitPlay.Launch/         # Native/User32, WindowManager, ExecutableResolver,
+   │                            #   GameWindowLocator, RealLaunchEngine
+   ├─ SplitPlay.TestTarget/     # WinForms placeholder/test window
    └─ SplitPlay.App/            # Mvvm/, Services/, ViewModels/, Views/, Themes/
 ```
 
@@ -75,14 +83,15 @@ SplitPlay/
 
 ## Roadmap (next)
 
-- Real launch engine behind `ILaunchEngine`:
-  - executable resolution + second-instance preparation,
-  - per-instance XInput routing (one pad → one window),
-  - borderless placement via `WindowManager`, lifecycle management.
+- **Per-instance controller isolation** (the key next step): make one pad drive
+  only one window (custom XInput shim / input redirection per instance).
+- Instance lifecycle: track launched processes, clean teardown, relaunch.
+- Smarter executable/second-instance handling (read Steam launch config; handle
+  launcher→game hand-off; single-instance mutex strategies).
 - Instance strategies (`InstanceStrategy`): mirrored copy + emulator
   (Goldberg/Nemirtingas) and dual real Steam accounts.
 - Auto-detection of per-game settings (replacing handler files entirely).
-- More than two players, richer controller info, themes.
+- More than two players, richer controller info (battery/live input), themes.
 
 ## Building
 

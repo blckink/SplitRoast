@@ -39,6 +39,9 @@ public sealed class GameDetailViewModel : PageViewModel
     private SplitOrientation _orientation = SplitOrientation.Vertical;
     private DisplayInfo? _selectedDisplay;
     private string _statusText = string.Empty;
+    private string _regionInfoP1 = string.Empty;
+    private string _regionInfoP2 = string.Empty;
+    private bool _useTestWindows;
     private int _progress;
     private bool _isLaunching;
 
@@ -100,6 +103,7 @@ public sealed class GameDetailViewModel : PageViewModel
             {
                 OnPropertyChanged(nameof(IsVertical));
                 OnPropertyChanged(nameof(IsHorizontal));
+                UpdateRegionInfo();
                 PersistProfile();
             }
         }
@@ -115,6 +119,37 @@ public sealed class GameDetailViewModel : PageViewModel
         set
         {
             if (SetProperty(ref _selectedDisplay, value))
+            {
+                UpdateRegionInfo();
+                PersistProfile();
+            }
+        }
+    }
+
+    /// <summary>Resolution of player 1's window for the current split, e.g. "960 × 1080".</summary>
+    public string RegionInfoP1
+    {
+        get => _regionInfoP1;
+        private set => SetProperty(ref _regionInfoP1, value);
+    }
+
+    /// <summary>Resolution of player 2's window for the current split.</summary>
+    public string RegionInfoP2
+    {
+        get => _regionInfoP2;
+        private set => SetProperty(ref _regionInfoP2, value);
+    }
+
+    /// <summary>
+    /// When on, Start opens neutral test windows instead of the real game - handy
+    /// to verify the split, display and placement safely.
+    /// </summary>
+    public bool UseTestWindows
+    {
+        get => _useTestWindows;
+        set
+        {
+            if (SetProperty(ref _useTestWindows, value))
             {
                 PersistProfile();
             }
@@ -162,7 +197,9 @@ public sealed class GameDetailViewModel : PageViewModel
 
             // Restore saved settings.
             Orientation = _profile.Orientation;
+            UseTestWindows = _profile.UseTestWindows;
             RestoreControllerSelections();
+            UpdateRegionInfo();
 
             // The service is monitoring app-wide; we just listen for changes.
             _gamepadService.GamepadsChanged += OnGamepadsChanged;
@@ -264,6 +301,7 @@ public sealed class GameDetailViewModel : PageViewModel
         }
 
         _profile.Orientation = Orientation;
+        _profile.UseTestWindows = UseTestWindows;
         _profile.TargetDisplayIndex =
             SelectedDisplay is null ? null : Displays.IndexOf(SelectedDisplay);
 
@@ -275,6 +313,21 @@ public sealed class GameDetailViewModel : PageViewModel
         // Fire and forget; saving a tiny JSON file is fast and failures here must
         // not interrupt the user's configuration flow.
         _ = _profileStore.SaveAsync(_profile);
+    }
+
+    /// <summary>Recomputes the per-player window resolution shown in the preview.</summary>
+    private void UpdateRegionInfo()
+    {
+        if (SelectedDisplay is null)
+        {
+            RegionInfoP1 = RegionInfoP2 = string.Empty;
+            return;
+        }
+
+        IReadOnlyList<ScreenRegion> regions =
+            _layoutCalculator.Calculate(SelectedDisplay, Orientation, PlayerCount);
+        RegionInfoP1 = $"{regions[0].Width} × {regions[0].Height}";
+        RegionInfoP2 = $"{regions[1].Width} × {regions[1].Height}";
     }
 
     /// <summary>Start is allowed only with two distinct controllers assigned.</summary>

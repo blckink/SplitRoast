@@ -25,6 +25,10 @@ public sealed class WindowManager
             return false;
         }
 
+        // Restore first so a maximized/minimized window can actually be moved and
+        // sized to the target region.
+        User32.ShowWindow(windowHandle, User32.SW_RESTORE);
+
         StripBorders(windowHandle);
 
         return User32.SetWindowPos(

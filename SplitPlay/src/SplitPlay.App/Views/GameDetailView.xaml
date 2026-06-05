@@ -119,6 +119,8 @@
                                                        Foreground="#FF10241D" HorizontalAlignment="Center" />
                                             <TextBlock Text="{Binding Players[0].Selected.Label}"
                                                        Foreground="#FF10241D" HorizontalAlignment="Center" FontSize="11" />
+                                            <TextBlock Text="{Binding RegionInfoP1}" Opacity="0.75"
+                                                       Foreground="#FF10241D" HorizontalAlignment="Center" FontSize="10" Margin="0,2,0,0" />
                                         </StackPanel>
                                     </Border>
                                     <Border Background="{StaticResource SurfaceAltBrush}" Margin="2,0,0,0"
@@ -128,6 +130,8 @@
                                                        Foreground="{StaticResource TextPrimaryBrush}" HorizontalAlignment="Center" />
                                             <TextBlock Text="{Binding Players[1].Selected.Label}"
                                                        Foreground="{StaticResource TextSecondaryBrush}" HorizontalAlignment="Center" FontSize="11" />
+                                            <TextBlock Text="{Binding RegionInfoP2}" Opacity="0.85"
+                                                       Foreground="{StaticResource TextSecondaryBrush}" HorizontalAlignment="Center" FontSize="10" Margin="0,2,0,0" />
                                         </StackPanel>
                                     </Border>
                                 </UniformGrid>
@@ -142,6 +146,8 @@
                                                        Foreground="#FF10241D" HorizontalAlignment="Center" />
                                             <TextBlock Text="{Binding Players[0].Selected.Label}"
                                                        Foreground="#FF10241D" HorizontalAlignment="Center" FontSize="11" />
+                                            <TextBlock Text="{Binding RegionInfoP1}" Opacity="0.75"
+                                                       Foreground="#FF10241D" HorizontalAlignment="Center" FontSize="10" Margin="0,2,0,0" />
                                         </StackPanel>
                                     </Border>
                                     <Border Background="{StaticResource SurfaceAltBrush}" Margin="0,2,0,0"
@@ -151,6 +157,8 @@
                                                        Foreground="{StaticResource TextPrimaryBrush}" HorizontalAlignment="Center" />
                                             <TextBlock Text="{Binding Players[1].Selected.Label}"
                                                        Foreground="{StaticResource TextSecondaryBrush}" HorizontalAlignment="Center" FontSize="11" />
+                                            <TextBlock Text="{Binding RegionInfoP2}" Opacity="0.85"
+                                                       Foreground="{StaticResource TextSecondaryBrush}" HorizontalAlignment="Center" FontSize="10" Margin="0,2,0,0" />
                                         </StackPanel>
                                     </Border>
                                 </UniformGrid>
@@ -158,9 +166,14 @@
                         </Viewbox>
                     </Border>
 
+                    <!-- Test mode -->
+                    <CheckBox Content="Test mode (open placeholder windows, don't launch the game)"
+                              IsChecked="{Binding UseTestWindows}" Margin="0,16,0,0"
+                              Foreground="{StaticResource TextSecondaryBrush}" />
+
                     <!-- Start -->
                     <Button Content="Start Split-Screen" Style="{StaticResource PrimaryButtonStyle}"
-                            Margin="0,18,0,0" HorizontalAlignment="Stretch"
+                            Margin="0,12,0,0" HorizontalAlignment="Stretch"
                             Command="{Binding StartCommand}" />
 
                     <!-- Progress + status -->

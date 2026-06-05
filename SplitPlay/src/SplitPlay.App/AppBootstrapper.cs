@@ -28,8 +28,10 @@ public static class AppBootstrapper
         services.AddSingleton<ISplitLayoutCalculator, SplitLayoutCalculator>();
         services.AddSingleton<IGamepadService, XInputGamepadService>();
 
-        // The MVP launch engine. Replace with the real engine here when ready.
-        services.AddSingleton<ILaunchEngine, StubLaunchEngine>();
+        // The launch engine. RealLaunchEngine launches the game (with a test-window
+        // fallback) and places the windows into the split. StubLaunchEngine remains
+        // available for a no-op preview if ever needed.
+        services.AddSingleton<ILaunchEngine, RealLaunchEngine>();
 
         // --- Shell + navigation ---
         services.AddSingleton<MainViewModel>();
