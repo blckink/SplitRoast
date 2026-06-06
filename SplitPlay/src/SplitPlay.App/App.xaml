@@ -1,0 +1,34 @@
+<Application x:Class="SplitPlay.App.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:SplitPlay.App.ViewModels"
+             xmlns:views="clr-namespace:SplitPlay.App.Views">
+    <!--
+        No StartupUri: the application is composed in code (App.xaml.cs) so the
+        main window and its view model come from the DI container.
+
+        The DataTemplates below are the view-model -> view mapping. Because each
+        template is keyed by DataType, a ContentControl bound to any page view
+        model automatically renders the right view.
+    -->
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Themes/Theme.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <DataTemplate DataType="{x:Type vm:GamesViewModel}">
+                <views:GamesView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:GameDetailViewModel}">
+                <views:GameDetailView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:ControlsViewModel}">
+                <views:ControlsView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:SettingsViewModel}">
+                <views:SettingsView />
+            </DataTemplate>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

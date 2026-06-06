@@ -1,0 +1,74 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    SplitPlay.App
+    The WPF presentation layer (.NET 8). Holds the views, view models and the
+    composition root (dependency injection). All real work is delegated to the
+    feature modules, which it references but does not reimplement.
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <RootNamespace>SplitPlay.App</RootNamespace>
+    <AssemblyName>SplitPlay</AssemblyName>
+    <UseWPF>true</UseWPF>
+    <!-- Enables System.Windows.Forms.Screen for robust multi-monitor enumeration. -->
+    <UseWindowsForms>true</UseWindowsForms>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon></ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SplitPlay.Core\SplitPlay.Core.csproj" />
+    <ProjectReference Include="..\SplitPlay.Steam\SplitPlay.Steam.csproj" />
+    <ProjectReference Include="..\SplitPlay.Input\SplitPlay.Input.csproj" />
+    <ProjectReference Include="..\SplitPlay.Launch\SplitPlay.Launch.csproj" />
+
+    <!--
+      The test-window helper is a separate executable. We reference it only to
+      force it to build before the app (ReferenceOutputAssembly=false: we do not
+      compile against it); it is then bundled into the app output by the
+      BundleTestTarget target below so the launch engine can find and start it.
+    -->
+    <ProjectReference Include="..\SplitPlay.TestTarget\SplitPlay.TestTarget.csproj"
+                      ReferenceOutputAssembly="false"
+                      Private="false" />
+  </ItemGroup>
+
+  <!--
+    Copies the full TestTarget build output (exe + dll + runtimeconfig + deps) into
+    a "TestTarget" subfolder of the app output. A .NET executable needs all of
+    these files, so we copy the whole folder rather than just the .exe.
+  -->
+  <Target Name="BundleTestTarget" AfterTargets="Build">
+    <PropertyGroup>
+      <TestTargetOutDir>$(MSBuildThisFileDirectory)..\SplitPlay.TestTarget\bin\$(Configuration)\net8.0-windows\</TestTargetOutDir>
+    </PropertyGroup>
+    <ItemGroup>
+      <TestTargetFiles Include="$(TestTargetOutDir)**\*.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(TestTargetFiles)"
+          DestinationFiles="@(TestTargetFiles->'$(OutDir)TestTarget\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+  <!--
+    Bundles the native XInput proxy (built separately by native/build-proxy.cmd)
+    into an "XInputProxy" subfolder of the app output, if it has been built. The
+    app runs fine without it - controller isolation is simply reported as off.
+  -->
+  <Target Name="BundleXInputProxy" AfterTargets="Build">
+    <ItemGroup>
+      <ProxyFiles Include="$(MSBuildThisFileDirectory)..\..\native\bin\**\SplitPlay.XInputProxy.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(ProxyFiles)"
+          DestinationFiles="@(ProxyFiles->'$(OutDir)XInputProxy\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true"
+          Condition="'@(ProxyFiles)' != ''" />
+  </Target>
+
+</Project>
