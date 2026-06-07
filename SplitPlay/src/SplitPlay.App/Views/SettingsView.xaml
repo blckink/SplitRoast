@@ -1,8 +1,6 @@
 <UserControl x:Class="SplitPlay.App.Views.SettingsView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:sys="clr-namespace:System;assembly=mscorlib"
-             xmlns:models="clr-namespace:SplitPlay.Core.Models;assembly=SplitPlay.Core"
              xmlns:vm="clr-namespace:SplitPlay.App.ViewModels"
              d:DataContext="{d:DesignInstance Type=vm:SettingsViewModel}"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -10,23 +8,8 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              Background="{StaticResource BackgroundBrush}">
 
-    <UserControl.Resources>
-        <!-- Exposes the SplitOrientation enum values to the orientation drop-down. -->
-        <ObjectDataProvider x:Key="Orientations" MethodName="GetValues" ObjectType="{x:Type sys:Enum}">
-            <ObjectDataProvider.MethodParameters>
-                <x:Type TypeName="models:SplitOrientation" />
-            </ObjectDataProvider.MethodParameters>
-        </ObjectDataProvider>
-    </UserControl.Resources>
-
     <StackPanel Margin="24,18,24,24">
         <TextBlock Text="Settings" Style="{StaticResource PageTitleStyle}" Margin="0,0,0,20" />
-
-        <!-- Default split orientation -->
-        <TextBlock Text="DEFAULT SCREEN SPLIT" Style="{StaticResource SectionLabelStyle}" />
-        <ComboBox Width="260" HorizontalAlignment="Left" Padding="8,5" Margin="0,0,0,24"
-                  ItemsSource="{Binding Source={StaticResource Orientations}}"
-                  SelectedItem="{Binding DefaultOrientation}" />
 
         <!-- About -->
         <TextBlock Text="ABOUT" Style="{StaticResource SectionLabelStyle}" />
@@ -43,5 +26,8 @@
                            Foreground="{StaticResource TextSecondaryBrush}" />
             </StackPanel>
         </Border>
+
+        <TextBlock Text="More settings will appear here as features are added."
+                   Margin="2,18,0,0" Foreground="{StaticResource TextSecondaryBrush}" FontSize="13" />
     </StackPanel>
 </UserControl>

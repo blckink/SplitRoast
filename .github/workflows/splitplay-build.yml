@@ -1,0 +1,66 @@
+name: SplitPlay Build
+
+# Builds the SplitPlay app on a real Windows runner for every change, so compile
+# errors are caught in CI instead of on a developer machine. It also produces
+# ready-to-use downloads (a portable build and the installer) as run artifacts.
+
+on:
+  push:
+    paths:
+      - "SplitPlay/**"
+      - ".github/workflows/splitplay-build.yml"
+  pull_request:
+    paths:
+      - "SplitPlay/**"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      # Fast feedback: compile the whole solution (C#, XAML, all modules).
+      - name: Build solution
+        run: dotnet build SplitPlay/SplitPlay.sln -c Release --nologo
+
+      # Native XInput proxy (windows-latest ships the VC++ toolset).
+      - name: Build native XInput proxy
+        shell: cmd
+        run: SplitPlay\native\build-proxy.cmd
+
+      - name: Install Inno Setup and 7-Zip
+        run: choco install innosetup 7zip -y --no-progress
+
+      # Download the Steam emulator (gbe_fork) so single-account co-op is bundled.
+      - name: Fetch Steam emulator (gbe_fork)
+        shell: pwsh
+        run: pwsh -ExecutionPolicy Bypass -File SplitPlay/redist/fetch-goldberg.ps1
+
+      # Full release pipeline: publish self-contained + bundle proxy + installer.
+      - name: Build installer
+        shell: pwsh
+        run: powershell -ExecutionPolicy Bypass -File SplitPlay/installer/build-release.ps1 -SkipBootstrap
+
+      - name: Upload installer
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SplitPlaySetup
+          path: SplitPlay/installer/output/SplitPlaySetup.exe
+          if-no-files-found: warn
+
+      - name: Upload portable build
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SplitPlay-portable
+          path: SplitPlay/installer/staging/app
+          if-no-files-found: warn

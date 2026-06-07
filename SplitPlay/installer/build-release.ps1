@@ -36,6 +36,17 @@ param(
 $ErrorActionPreference = "Stop"
 $Runtime = "win-x64"
 
+# Keep the machine awake for the whole run - a long tool install must not be
+# interrupted by sleep (which can leave the installer hung). Cleared on exit.
+try {
+    Add-Type -Namespace Win32 -Name Power -MemberDefinition @'
+[System.Runtime.InteropServices.DllImport("kernel32.dll")]
+public static extern uint SetThreadExecutionState(uint esFlags);
+'@ -ErrorAction SilentlyContinue
+    # ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED
+    [void][Win32.Power]::SetThreadExecutionState([uint32]'0x80000003')
+} catch { }
+
 # --- Paths -----------------------------------------------------------------
 $InstallerDir = $PSScriptRoot
 $Root         = Split-Path -Parent $InstallerDir          # ...\SplitPlay
@@ -132,8 +143,11 @@ if (-not $SkipBootstrap -and $needInstall) {
         Install-WingetPackage "Microsoft.DotNet.SDK.8"
     }
     if ($needVc) {
+        Write-Host "    Installing Visual C++ Build Tools - this is several GB and can" -ForegroundColor Yellow
+        Write-Host "    take 10-20 minutes. A Visual Studio Installer progress window will" -ForegroundColor Yellow
+        Write-Host "    appear; let it finish (this script waits for it)." -ForegroundColor Yellow
         Install-WingetPackage "Microsoft.VisualStudio.2022.BuildTools" `
-            "--quiet --wait --norestart --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+            "--passive --wait --norestart --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
     }
     if ($needIscc) {
         Install-WingetPackage "JRSoftware.InnoSetup"
@@ -177,6 +191,18 @@ New-Item -ItemType Directory -Path $proxyDestX64 -Force | Out-Null
 New-Item -ItemType Directory -Path $proxyDestX86 -Force | Out-Null
 Copy-Item $ProxyBinX64 $proxyDestX64 -Force
 Copy-Item $ProxyBinX86 $proxyDestX86 -Force
+
+# Bundle the Steam emulator (gbe_fork), if it has been fetched. The launch engine
+# uses it to run a second instance from a single Steam account.
+$goldbergSrc = Join-Path $Root "redist\goldberg"
+if (Test-Path $goldbergSrc) {
+    $goldbergDest = Join-Path $Staging "Redist\Goldberg"
+    New-Item -ItemType Directory -Force -Path $goldbergDest | Out-Null
+    Copy-Item (Join-Path $goldbergSrc "*") $goldbergDest -Recurse -Force
+    Write-Host "    Bundled Steam emulator from $goldbergSrc" -ForegroundColor Green
+} else {
+    Write-Host "    NOTE: Steam emulator not found ($goldbergSrc) - co-op via single account will be unavailable. Run redist\fetch-goldberg.ps1." -ForegroundColor Yellow
+}
 
 # --- 4. Compile the installer ----------------------------------------------
 Write-Step "Building installer"

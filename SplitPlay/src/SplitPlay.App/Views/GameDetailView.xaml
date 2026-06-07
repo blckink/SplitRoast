@@ -49,7 +49,7 @@
                     <ColumnDefinition Width="380" />
                 </Grid.ColumnDefinitions>
 
-                <!-- -------------------- Left: configuration -------------------- -->
+                <!-- Left column: configuration -->
                 <StackPanel Grid.Column="0">
 
                     <!-- Split orientation -->
@@ -100,7 +100,7 @@
                                Margin="2,4,0,0" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" />
                 </StackPanel>
 
-                <!-- -------------------- Right: preview + start ----------------- -->
+                <!-- Right column: preview + start -->
                 <StackPanel Grid.Column="2">
                     <TextBlock Text="PREVIEW" Style="{StaticResource SectionLabelStyle}" />
 
@@ -184,7 +184,7 @@
 
                     <!-- Progress + status -->
                     <ProgressBar Height="6" Margin="0,12,0,0" Minimum="0" Maximum="100"
-                                 Value="{Binding Progress}"
+                                 Value="{Binding Progress, Mode=OneWay}"
                                  Foreground="{StaticResource AccentBrush}"
                                  Background="{StaticResource SurfaceAltBrush}" BorderThickness="0"
                                  Visibility="{Binding IsLaunching, Converter={StaticResource BoolToVis}}" />

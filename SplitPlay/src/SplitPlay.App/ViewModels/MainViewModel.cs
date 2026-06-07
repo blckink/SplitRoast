@@ -117,14 +117,24 @@ public sealed class MainViewModel : ObservableObject, IShellNavigator
 
     public async void NavigateToGameDetail(SteamGame game)
     {
-        DetachActiveDetail();
+        try
+        {
+            DetachActiveDetail();
 
-        var detail = _services.GetRequiredService<GameDetailViewModel>();
-        _activeDetail = detail;
-        CurrentPage = detail;
-        ActiveSection = SectionGames; // Detail is conceptually under "Games".
+            var detail = _services.GetRequiredService<GameDetailViewModel>();
+            _activeDetail = detail;
+            CurrentPage = detail;
+            ActiveSection = SectionGames; // Detail is conceptually under "Games".
 
-        await detail.InitializeAsync(game);
+            await detail.InitializeAsync(game);
+        }
+        catch (Exception ex)
+        {
+            // Never let opening a game take down the app; show what happened and
+            // fall back to the games grid.
+            Diagnostics.CrashReporter.Report(ex, "Open game detail");
+            NavigateToGames();
+        }
     }
 
     public void NavigateToControls()
