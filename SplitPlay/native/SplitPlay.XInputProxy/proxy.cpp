@@ -69,6 +69,9 @@ static bool    g_hasWindowTarget = false;
 static HWND    g_hookedWnd = NULL;
 static WNDPROC g_origProc = NULL;
 
+static void AssignRawDevice();
+static void InstallRawInputHooks();
+
 static DWORD WINAPI WindowEnforceThread(LPVOID);
 static void RefreshAssignedIndex();
 
@@ -312,15 +315,12 @@ static int  g_foreignKeyCount = 0;
 // Windows Gaming Input (WGI) block: Rewired/Unity can use WGI which completely
 // bypasses XInput and Raw Input. We hook RoGetActivationFactory and block any
 // requests for classes under Windows.Gaming.Input by returning REGDB_E_CLASSNOTREG.
-// We need to define HSTRING and REFIID if they aren't available, but combase functions
-// use them. Since we only pass them along, we can type them as void* and IID*.
-typedef void* HSTRING;
-typedef const GUID& REFIID;
-typedef HRESULT (WINAPI* PFN_RoGetActivationFactory)(HSTRING, REFIID, void**);
-typedef PCWSTR  (WINAPI* PFN_WindowsGetStringRawBuffer)(HSTRING, UINT32*);
+// We use void* for HSTRING and REFIID to avoid including WinRT headers.
+typedef HRESULT (WINAPI* PFN_RoGetActivationFactory)(void*, void*, void**);
+typedef PCWSTR  (WINAPI* PFN_WindowsGetStringRawBuffer)(void*, UINT32*);
 static PFN_RoGetActivationFactory o_RoGetActivationFactory = NULL;
 static PFN_WindowsGetStringRawBuffer p_WindowsGetStringRawBuffer = NULL;
-static HRESULT WINAPI My_RoGetActivationFactory(HSTRING activatableClassId, REFIID iid, void** factory);
+static HRESULT WINAPI My_RoGetActivationFactory(void* activatableClassId, void* iid, void** factory);
 
 static int WINAPI My_GetSystemMetrics(int nIndex)
 {
@@ -835,7 +835,7 @@ static void LogWgiBlockOnce()
     }
 }
 
-static HRESULT WINAPI My_RoGetActivationFactory(HSTRING activatableClassId, REFIID iid, void** factory)
+static HRESULT WINAPI My_RoGetActivationFactory(void* activatableClassId, void* iid, void** factory)
 {
     if (g_rawFilterReady && activatableClassId != NULL && p_WindowsGetStringRawBuffer != NULL)
     {
