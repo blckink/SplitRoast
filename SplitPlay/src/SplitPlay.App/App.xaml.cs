@@ -1,5 +1,8 @@
+using System;
+using System.Threading.Tasks;
 using System.Windows;
 using Microsoft.Extensions.DependencyInjection;
+using SplitPlay.App.Diagnostics;
 using SplitPlay.App.ViewModels;
 using SplitPlay.App.Views;
 using SplitPlay.Core.Abstractions;
@@ -19,6 +22,9 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+
+        // Surface any unhandled error instead of letting the app vanish silently.
+        SetupGlobalExceptionHandling();
 
         var services = new ServiceCollection();
         AppBootstrapper.ConfigureServices(services);
@@ -49,5 +55,29 @@ public partial class App : Application
         // Disposes singletons, including the gamepad service (stops its timer).
         _provider?.Dispose();
         base.OnExit(e);
+    }
+
+    /// <summary>
+    /// Routes unhandled exceptions from the UI thread, background threads and tasks
+    /// to a single place: they are written to %AppData%/SplitPlay/crash.log and
+    /// shown in a dialog. UI-thread exceptions are marked handled so a single bad
+    /// action (e.g. opening one page) doesn't kill the whole app.
+    /// </summary>
+    private void SetupGlobalExceptionHandling()
+    {
+        DispatcherUnhandledException += (_, args) =>
+        {
+            CrashReporter.Report(args.Exception, "UI thread");
+            args.Handled = true;
+        };
+
+        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+            CrashReporter.Report(args.ExceptionObject as Exception, "background thread");
+
+        TaskScheduler.UnobservedTaskException += (_, args) =>
+        {
+            CrashReporter.Report(args.Exception, "task");
+            args.SetObserved();
+        };
     }
 }

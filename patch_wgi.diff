@@ -1,0 +1,133 @@
+<<<<<<< SEARCH
+// Direct-HID block: Rewired (and similar) can open the gamepad's HID device
+// directly via CreateFile and read its reports, bypassing both XInput and the
+// Raw Input API. We block opening any FOREIGN gamepad device so an instance can
+// physically only read its own controller - the last in-process channel.
+typedef HANDLE (WINAPI* PFN_CreateFileW)(LPCWSTR, DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD, DWORD, HANDLE);
+typedef HANDLE (WINAPI* PFN_CreateFileA)(LPCSTR, DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD, DWORD, HANDLE);
+static PFN_CreateFileW o_CreateFileW = NULL;
+static PFN_CreateFileA o_CreateFileA = NULL;
+static HANDLE WINAPI My_CreateFileW(LPCWSTR, DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD, DWORD, HANDLE);
+static HANDLE WINAPI My_CreateFileA(LPCSTR, DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD, DWORD, HANDLE);
+static char g_foreignKeys[8][200];
+static int  g_foreignKeyCount = 0;
+=======
+// Direct-HID block: Rewired (and similar) can open the gamepad's HID device
+// directly via CreateFile and read its reports, bypassing both XInput and the
+// Raw Input API. We block opening any FOREIGN gamepad device so an instance can
+// physically only read its own controller - the last in-process channel.
+typedef HANDLE (WINAPI* PFN_CreateFileW)(LPCWSTR, DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD, DWORD, HANDLE);
+typedef HANDLE (WINAPI* PFN_CreateFileA)(LPCSTR, DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD, DWORD, HANDLE);
+static PFN_CreateFileW o_CreateFileW = NULL;
+static PFN_CreateFileA o_CreateFileA = NULL;
+static HANDLE WINAPI My_CreateFileW(LPCWSTR, DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD, DWORD, HANDLE);
+static HANDLE WINAPI My_CreateFileA(LPCSTR, DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD, DWORD, HANDLE);
+static char g_foreignKeys[8][200];
+static int  g_foreignKeyCount = 0;
+
+// Windows Gaming Input (WGI) block: Rewired/Unity can use WGI which completely
+// bypasses XInput and Raw Input. We hook RoGetActivationFactory and block any
+// requests for classes under Windows.Gaming.Input by returning REGDB_E_CLASSNOTREG.
+typedef HRESULT (WINAPI* PFN_RoGetActivationFactory)(HSTRING, REFIID, void**);
+typedef PCWSTR  (WINAPI* PFN_WindowsGetStringRawBuffer)(HSTRING, UINT32*);
+static PFN_RoGetActivationFactory o_RoGetActivationFactory = NULL;
+static PFN_WindowsGetStringRawBuffer p_WindowsGetStringRawBuffer = NULL;
+static HRESULT WINAPI My_RoGetActivationFactory(HSTRING activatableClassId, REFIID iid, void** factory);
+>>>>>>> REPLACE
+<<<<<<< SEARCH
+    return o_CreateFileA(name, access, share, sec, disp, flags, templ);
+}
+
+// Installs INLINE hooks (via MinHook) on the Raw Input read functions inside
+=======
+    return o_CreateFileA(name, access, share, sec, disp, flags, templ);
+}
+
+static void LogWgiBlockOnce()
+{
+    static volatile LONG logged = 0;
+    if (InterlockedCompareExchange(&logged, 1, 0) == 0)
+    {
+        ProxyLog("wgi: blocked RoGetActivationFactory for Windows.Gaming.Input");
+    }
+}
+
+static HRESULT WINAPI My_RoGetActivationFactory(HSTRING activatableClassId, REFIID iid, void** factory)
+{
+    if (g_rawFilterReady && activatableClassId != NULL && p_WindowsGetStringRawBuffer != NULL)
+    {
+        UINT32 len = 0;
+        PCWSTR str = p_WindowsGetStringRawBuffer(activatableClassId, &len);
+        if (str != NULL && len >= 20)
+        {
+            // Check if it starts with "Windows.Gaming.Input"
+            if (wcsncmp(str, L"Windows.Gaming.Input", 20) == 0)
+            {
+                LogWgiBlockOnce();
+                return 0x80040154; // REGDB_E_CLASSNOTREG
+            }
+        }
+    }
+    return o_RoGetActivationFactory(activatableClassId, iid, factory);
+}
+
+// Installs INLINE hooks (via MinHook) on the Raw Input read functions inside
+>>>>>>> REPLACE
+<<<<<<< SEARCH
+    // Block direct HID opens of foreign gamepads (kernel32!CreateFile).
+    int hidHooks = 0;
+    HMODULE k32 = GetModuleHandleA("kernel32.dll");
+    if (k32 != NULL)
+    {
+        void* pcw = (void*)GetProcAddress(k32, "CreateFileW");
+        void* pca = (void*)GetProcAddress(k32, "CreateFileA");
+        if (pcw != NULL && MH_CreateHook(pcw, (void*)My_CreateFileW, (void**)&o_CreateFileW) == MH_OK &&
+            MH_EnableHook(pcw) == MH_OK) { hidHooks++; }
+        if (pca != NULL && MH_CreateHook(pca, (void*)My_CreateFileA, (void**)&o_CreateFileA) == MH_OK &&
+            MH_EnableHook(pca) == MH_OK) { hidHooks++; }
+    }
+
+    char msg[160];
+    sprintf_s(msg, sizeof(msg), "rawinput: inline hooks installed (data %d/2, msgpump %d/4, hid %d/2)",
+              installed, msgHooks, hidHooks);
+    ProxyLog(msg);
+}
+=======
+    // Block direct HID opens of foreign gamepads (kernel32!CreateFile).
+    int hidHooks = 0;
+    HMODULE k32 = GetModuleHandleA("kernel32.dll");
+    if (k32 != NULL)
+    {
+        void* pcw = (void*)GetProcAddress(k32, "CreateFileW");
+        void* pca = (void*)GetProcAddress(k32, "CreateFileA");
+        if (pcw != NULL && MH_CreateHook(pcw, (void*)My_CreateFileW, (void**)&o_CreateFileW) == MH_OK &&
+            MH_EnableHook(pcw) == MH_OK) { hidHooks++; }
+        if (pca != NULL && MH_CreateHook(pca, (void*)My_CreateFileA, (void**)&o_CreateFileA) == MH_OK &&
+            MH_EnableHook(pca) == MH_OK) { hidHooks++; }
+    }
+
+    // Block Windows Gaming Input (combase!RoGetActivationFactory).
+    int wgiHooks = 0;
+    HMODULE combase = GetModuleHandleA("combase.dll");
+    if (combase == NULL)
+    {
+        combase = LoadLibraryA("combase.dll");
+    }
+    if (combase != NULL)
+    {
+        p_WindowsGetStringRawBuffer = (PFN_WindowsGetStringRawBuffer)GetProcAddress(combase, "WindowsGetStringRawBuffer");
+        void* pRoGet = (void*)GetProcAddress(combase, "RoGetActivationFactory");
+        if (pRoGet != NULL && p_WindowsGetStringRawBuffer != NULL &&
+            MH_CreateHook(pRoGet, (void*)My_RoGetActivationFactory, (void**)&o_RoGetActivationFactory) == MH_OK &&
+            MH_EnableHook(pRoGet) == MH_OK)
+        {
+            wgiHooks++;
+        }
+    }
+
+    char msg[160];
+    sprintf_s(msg, sizeof(msg), "rawinput: inline hooks installed (data %d/2, msgpump %d/4, hid %d/2, wgi %d/1)",
+              installed, msgHooks, hidHooks, wgiHooks);
+    ProxyLog(msg);
+}
+>>>>>>> REPLACE

@@ -19,6 +19,12 @@ public sealed class InputIsolationManager
     /// <summary>Environment variable read by the proxy to pick the physical pad.</summary>
     public const string EnvVarName = "SPLITPLAY_XINPUT_INDEX";
 
+    /// <summary>Environment variable: path to the live "which slot to follow" file.</summary>
+    public const string PadFileEnvVar = "SPLITPLAY_PAD_FILE";
+
+    /// <summary>Name of the per-instance live pad-slot file (next to the game exe).</summary>
+    public const string PadFileName = "splitplay_pad.txt";
+
     private const string BackupSuffix = ".splitplay-bak";
 
     // The xinput module names a game might load. We shadow all of them.
@@ -53,6 +59,41 @@ public sealed class InputIsolationManager
 
     /// <summary>True if a proxy DLL is available for the given architecture.</summary>
     public bool IsProxyAvailable(ProcessArchitecture arch) => GetProxyForArch(arch) is not null;
+
+    /// <summary>
+    /// Copies the XInput proxy DLLs straight into a directory we fully own (e.g. a
+    /// mirrored co-op instance folder), with no backup/restore bookkeeping. Any
+    /// existing (hard-linked) xinput DLLs are deleted first so the originals are
+    /// never modified. Returns true on success.
+    /// </summary>
+    public bool DeployProxy(string targetDir, ProcessArchitecture arch)
+    {
+        string? proxy = GetProxyForArch(arch);
+        if (proxy is null || !Directory.Exists(targetDir))
+        {
+            return false;
+        }
+
+        try
+        {
+            foreach (string name in XInputNames)
+            {
+                string dest = Path.Combine(targetDir, name);
+                if (File.Exists(dest))
+                {
+                    File.Delete(dest); // Drop the hard link, keep the original intact.
+                }
+
+                File.Copy(proxy, dest, overwrite: true);
+            }
+
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
 
     /// <summary>
     /// Installs the proxy into <paramref name="gameExeDir"/> for the given

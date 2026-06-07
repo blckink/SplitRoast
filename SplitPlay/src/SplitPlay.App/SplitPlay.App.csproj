@@ -12,8 +12,6 @@
     <RootNamespace>SplitPlay.App</RootNamespace>
     <AssemblyName>SplitPlay</AssemblyName>
     <UseWPF>true</UseWPF>
-    <!-- Enables System.Windows.Forms.Screen for robust multi-monitor enumeration. -->
-    <UseWindowsForms>true</UseWindowsForms>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon></ApplicationIcon>
   </PropertyGroup>
@@ -69,6 +67,22 @@
           DestinationFiles="@(ProxyFiles->'$(OutDir)XInputProxy\%(RecursiveDir)%(Filename)%(Extension)')"
           SkipUnchangedFiles="true"
           Condition="'@(ProxyFiles)' != ''" />
+  </Target>
+
+  <!--
+    Bundles the Steam emulator (gbe_fork), if it has been fetched into
+    redist\goldberg (by redist\fetch-goldberg.ps1 or CI), into a Redist\Goldberg
+    folder of the app output. The app runs fine without it; single-account co-op
+    is then simply reported as unavailable.
+  -->
+  <Target Name="BundleGoldberg" AfterTargets="Build">
+    <ItemGroup>
+      <GoldbergFiles Include="$(MSBuildThisFileDirectory)..\..\redist\goldberg\**\*.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(GoldbergFiles)"
+          DestinationFiles="@(GoldbergFiles->'$(OutDir)Redist\Goldberg\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true"
+          Condition="'@(GoldbergFiles)' != ''" />
   </Target>
 
 </Project>
