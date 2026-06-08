@@ -60,12 +60,11 @@ individual is officially representing the community in public spaces.
 
 ## Enforcement
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be reported
-to the project maintainers responsible for enforcement.
-
-<!-- TODO: add a real contact address here (e.g. a dedicated conduct@ inbox) before
-     promoting the project widely. A personal email works too, but use one you're
-     comfortable making public. -->
+Instances of abusive, harassing, or otherwise unacceptable behavior can be reported
+to the project maintainers **through GitHub** — either by opening a
+[private report](https://docs.github.com/en/code-security/security-advisories/guidance-on-reporting-and-writing-information-about-vulnerabilities/privately-reporting-a-security-vulnerability)
+on the repository or by contacting a maintainer via their GitHub profile. There is
+no public contact email by design; please keep reports on-platform.
 
 All complaints will be reviewed and investigated promptly and fairly. All community
 leaders are obligated to respect the privacy and security of the reporter of any

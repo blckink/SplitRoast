@@ -224,6 +224,30 @@ fix it than argue about it.
 
 ---
 
+## ⚠️ Disclaimer (a.k.a. the part where we duck)
+
+SplitRoast is a free, open-source hobby project, shipped **"as is"**, with
+**absolutely no warranty** — express or implied (the [GPL-3.0](LICENSE) spells this
+out in sections 15–16, and we mean it).
+
+- **Use it at your own risk.** The maintainers and contributors are **not liable**
+  for anything that happens because you ran it — broken installs, corrupted saves,
+  misbehaving games, account issues, a PC that decides to take a nap, or your dinner
+  getting cold. If it breaks, you get to keep both pieces.
+- **You are responsible for how you use it.** Complying with the terms of service,
+  EULAs, and licenses of the games, platforms (Steam included), and bundled tools you
+  point it at is **on you**, not us. We provide a tool; what you do with it is your
+  call and your responsibility.
+- **Not affiliated with anyone.** SplitRoast is not affiliated with, endorsed by, or
+  connected to Valve, Steam, Microsoft, or any game publisher. All trademarks belong
+  to their respective owners.
+- **Play games you own.** Same as above, louder: this is for *legitimately owned*
+  games on hardware you control. It will never help you pirate anything.
+
+Short version: it's a fun toy for couch co-op, not a contract. Be sensible. 🫡
+
+---
+
 ## 🙏 Standing on the shoulders of giants (who did the hard part first)
 
 We borrowed *ideas*, not code, and we owe these projects a proper thank-you:
