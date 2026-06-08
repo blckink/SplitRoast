@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render mockups of the SplitPlay UI that mirror the implemented XAML layout
+"""Render mockups of the SplitRoast UI that mirror the implemented XAML layout
 and theme. Output: docs/mockups/*.png. Drawn at 2x then downscaled for crisp text."""
 import os
 from PIL import Image, ImageDraw, ImageFont
@@ -71,7 +71,7 @@ def topbar(m, active, show_search=None):
     m.rect(14, 13, 22, 22, fill="accent", r=4)
     m.rect(19, 18, 5, 12, fill="dark")
     m.rect(26, 18, 5, 12, fill="dark")
-    m.text(44, 24, "SplitPlay", BOLD(16), "text", anchor="lm")
+    m.text(44, 24, "SplitRoast", BOLD(16), "text", anchor="lm")
     # search (only on games)
     if show_search:
         m.rect(150, 9, 240, 30, fill="surface", outline="border", r=6)

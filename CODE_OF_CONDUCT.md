@@ -38,7 +38,7 @@ Examples of unacceptable behavior include:
 
 ## A note on the subject matter
 
-SplitPlay exists to play **legitimately owned** games in split-screen by legitimate
+SplitRoast exists to play **legitimately owned** games in split-screen by legitimate
 means. Using the project, or this community, to facilitate piracy or other illegal
 activity is not welcome and will be treated as a breach of this Code of Conduct.
 

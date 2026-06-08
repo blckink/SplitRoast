@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    SplitRoast.TestTarget
+    A tiny, self-contained WinForms window used as a deterministic stand-in for a
+    game during testing. The launch engine starts it (one per player) when the
+    real game cannot provide a second window, or when test mode is on. It also
+    shows the live input of its assigned controller, which doubles as a controller
+    mapping check. It is bundled next to the app via a project reference.
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <RootNamespace>SplitRoast.TestTarget</RootNamespace>
+    <AssemblyName>SplitRoast.TestTarget</AssemblyName>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SplitRoast.Core\SplitRoast.Core.csproj" />
+    <ProjectReference Include="..\SplitRoast.Input\SplitRoast.Input.csproj" />
+  </ItemGroup>
+
+</Project>

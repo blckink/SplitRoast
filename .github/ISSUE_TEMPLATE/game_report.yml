@@ -1,12 +1,12 @@
 name: "🎮 Game compatibility report"
-description: Tell us whether SplitPlay works (or doesn't) on a specific game. This is the most useful thing you can file.
+description: Tell us whether SplitRoast works (or doesn't) on a specific game. This is the most useful thing you can file.
 title: "🎮 <game name> — works / doesn't work"
 labels: ["game-report"]
 body:
   - type: markdown
     attributes:
       value: |
-        SplitPlay has been verified on a tiny number of games so far. Your report
+        SplitRoast has been verified on a tiny number of games so far. Your report
         directly moves that number. Thank you. ❤️
 
   - type: input

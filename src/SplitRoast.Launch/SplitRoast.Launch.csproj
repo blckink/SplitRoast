@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    SplitRoast.Launch
+    The session launch pipeline: positioning/borderless window handling (Win32)
+    and the launch engine that ties games, layout and input routing together.
+    The MVP ships StubLaunchEngine; the real engine replaces it behind the same
+    ILaunchEngine interface without touching the rest of the app.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <RootNamespace>SplitRoast.Launch</RootNamespace>
+    <AssemblyName>SplitRoast.Launch</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SplitRoast.Core\SplitRoast.Core.csproj" />
+  </ItemGroup>
+
+</Project>
