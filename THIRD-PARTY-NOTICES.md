@@ -37,21 +37,20 @@ emulator yourself.
 
 ---
 
-## Prior art & inspiration (referenced, **not** shipped, **not** copied)
+## Prior art & inspiration (referenced with thanks)
 
-SplitRoast is a from-scratch reimplementation. It does not contain code from any of
-the projects below — we read them, learned from them, and then wrote our own. They
-deserve a tip of the hat all the same.
+These are the projects SplitRoast learned the most from. We wrote our own
+implementation rather than reuse their code, but the ideas and the inspiration are
+theirs — listed here with full credit and genuine gratitude.
 
 ### Nucleus Co-op / SplitScreen.Me
 - **What:** The OG of bring-your-own-split-screen on PC. The whole category exists
   because these folks did the hard, thankless plumbing first.
 - **Upstream:** https://github.com/SplitScreen-Me/splitscreenme-nucleus
 - **License:** GPL-3.0
-- **Relationship to SplitRoast:** Conceptual reference only. Two source comments in
-  our codebase mention Nucleus to explain *why we chose a different approach* — no
-  code was lifted. If you want the battle-tested, 800-games-strong tool today, go
-  use theirs; it's great.
+- **Relationship to SplitRoast:** Conceptual inspiration. A couple of comments in our
+  code point back to Nucleus to explain a design choice. If you want the mature,
+  800-games-strong tool, theirs is fantastic — go grab it.
 
 ### ProtoInput
 - **What:** Input isolation / multi-keyboard-and-mouse hooking, by Ilyaki.

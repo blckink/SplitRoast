@@ -198,29 +198,27 @@ Roughly in order of "things that stop us being a one-game tech demo":
 
 ---
 
-## ⚖️ Legal & licensing — "are we even allowed to do this?"
+## ⚖️ Licensing & credits
 
-Short version: **yes, and we did our homework.** Long version:
+We wanted to keep this tidy and make sure everyone gets their due, so here's how the
+pieces fit together:
 
-- **SplitRoast's own code is from scratch.** It is not a fork of anyone's source.
-  It's licensed under **[GPL-3.0](LICENSE)**, in the spirit of the co-op-tooling
-  ecosystem it grew up admiring.
-- **We don't ship anyone's code without honoring their license.** Every third-party
-  component we build against or redistribute is listed in
-  **[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)** with its license and source.
-  The two that ship in releases:
+- **SplitRoast's own code** is written from scratch and licensed under
+  **[GPL-3.0](LICENSE)** — happily in the spirit of the co-op-tooling community it
+  grew up admiring.
+- **The third-party pieces we ship** are listed, with their licenses and source, in
+  **[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)**:
   - **gbe_fork** (Steam emulator) — **LGPL-3.0**, used unmodified, license + source
     pointer bundled alongside the binaries.
   - **MinHook** — **BSD-2-Clause**, compiled into the proxy, attribution preserved.
-- **We didn't copy Nucleus / ProtoInput / x360ce.** We read them, learned from them,
-  and wrote our own. They're credited below and in the notices as prior art, not as
-  vendored code.
-- **Play games you actually own.** SplitRoast is for running *legitimately owned*
-  games in split-screen on hardware you control. It does not, and will not, help you
-  pirate anything. Don't be that person.
+- **Nucleus, ProtoInput and x360ce** are the projects we learned the most from. We
+  ended up writing our own implementation rather than reusing their code, but the
+  inspiration is entirely theirs — they're credited below with genuine thanks.
+- **Play games you actually own.** SplitRoast is just a convenience layer for running
+  *your* games in split-screen on *your* PC.
 
-If you're a rights-holder and something here looks off, open an issue — we'd rather
-fix it than argue about it.
+If you're one of these projects, or a rights-holder, and you'd like a credit tweaked
+or some wording changed, just open an issue — we'll happily sort it out.
 
 ---
 
@@ -250,7 +248,10 @@ Short version: it's a fun toy for couch co-op, not a contract. Be sensible. 🫡
 
 ## 🙏 Standing on the shoulders of giants (who did the hard part first)
 
-We borrowed *ideas*, not code, and we owe these projects a proper thank-you:
+Honestly, SplitRoast is a tiny hobby tool we built so we could mess around in
+split-screen on the couch without the hassle. It only got off the ground because
+other people solved the genuinely hard problems first. Big respect and a heartfelt
+thank-you to:
 
 - **[Nucleus Co-op / SplitScreen.Me](https://github.com/SplitScreen-Me/splitscreenme-nucleus)**
   — the reason this entire category exists. 800+ games, years of thankless plumbing,
