@@ -37,9 +37,20 @@ jobs:
         run: choco install innosetup 7zip -y --no-progress
 
       # Download the Steam emulator (gbe_fork) so single-account co-op is bundled.
+      # This is an OPTIONAL, best-effort step: it pulls a third-party release from
+      # GitHub's CDN, which occasionally serves transient 504s. A flaky external
+      # download must not fail our build, so this step is allowed to fail — the
+      # installer below degrades gracefully and just omits single-account co-op.
       - name: Fetch Steam emulator (gbe_fork)
+        id: goldberg
+        continue-on-error: true
         shell: pwsh
         run: pwsh -ExecutionPolicy Bypass -File redist/fetch-goldberg.ps1
+
+      - name: Note if emulator was not bundled
+        if: steps.goldberg.outcome != 'success'
+        shell: pwsh
+        run: Write-Host "::warning::gbe_fork download failed (likely a transient CDN 504). Building without the bundled Steam emulator; single-account co-op will be unavailable in these artifacts."
 
       # Full release pipeline: publish self-contained + bundle proxy + installer.
       - name: Build installer

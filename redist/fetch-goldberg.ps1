@@ -56,8 +56,21 @@ Write-Host "  Using asset: $($asset.name)"
 $tmp = Join-Path ([System.IO.Path]::GetTempPath()) "gbe_fork"
 New-Item -ItemType Directory -Force -Path $tmp | Out-Null
 $archive = Join-Path $tmp $asset.name
-Invoke-WithRetry -What "download $($asset.name)" -Action {
-    Invoke-WebRequest $asset.browser_download_url -OutFile $archive -Headers $headers
+
+# GitHub's release CDN (objects.githubusercontent.com) sometimes serves 504s for
+# a given asset URL while the REST asset endpoint stays healthy, and vice versa.
+# Each attempt tries the public browser URL first, then the API octet-stream URL,
+# so a one-sided outage on either path doesn't sink the download.
+$apiAssetUrl = "https://api.github.com/repos/Detanup01/gbe_fork/releases/assets/$($asset.id)"
+Invoke-WithRetry -What "download $($asset.name)" -MaxAttempts 6 -Action {
+    try {
+        Invoke-WebRequest $asset.browser_download_url -OutFile $archive -Headers $headers
+    }
+    catch {
+        Write-Host "    browser URL failed ($($_.Exception.Message)); trying the API asset endpoint..."
+        $apiHeaders = @{ "User-Agent" = "splitplay-ci"; "Accept" = "application/octet-stream" }
+        Invoke-WebRequest $apiAssetUrl -OutFile $archive -Headers $apiHeaders
+    }
 }
 
 # Locate 7-Zip.
