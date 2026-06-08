@@ -7,7 +7,7 @@
 Two controllers, one PC, one screen sliced cleanly in half — for online co-op
 games that stubbornly refuse to do split-screen themselves.
 
-[![SplitRoast Build](https://github.com/blckink/splitscreen/actions/workflows/splitroast-build.yml/badge.svg)](https://github.com/blckink/splitscreen/actions/workflows/splitroast-build.yml)
+[![SplitRoast Build](https://github.com/blckink/SplitRoast/actions/workflows/splitroast-build.yml/badge.svg)](https://github.com/blckink/SplitRoast/actions/workflows/splitroast-build.yml)
 ![Platform: Windows](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D6)
 ![.NET 8](https://img.shields.io/badge/.NET-8.0-512BD4)
 ![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue)
@@ -107,7 +107,7 @@ No real magic, just a few well-aimed hacks:
 ### Easiest: one file, no fuss
 
 Grab the latest **`SplitRoastSetup.exe`** from
-[Actions → SplitRoast Build → Artifacts](https://github.com/blckink/splitscreen/actions/workflows/splitroast-build.yml)
+[Actions → SplitRoast Build → Artifacts](https://github.com/blckink/SplitRoast/actions/workflows/splitroast-build.yml)
 (or a Releases page once we cut one). It's self-contained: no .NET, no C++ runtime,
 no tools on the target PC. Double-click, done.
 
