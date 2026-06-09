@@ -4,12 +4,12 @@ rem ============================================================================
 rem  Builds the native XInput proxy DLL for x64 and x86 using the Visual C++
 rem  compiler (cl.exe). Requires the "Desktop development with C++" workload
 rem  (or the C++ Build Tools). Outputs:
-rem      native\bin\x64\SplitPlay.XInputProxy.dll
-rem      native\bin\x86\SplitPlay.XInputProxy.dll
+rem      native\bin\x64\SplitRoast.XInputProxy.dll
+rem      native\bin\x86\SplitRoast.XInputProxy.dll
 rem  Run this once after installing the C++ tools; re-run if proxy.cpp changes.
 rem ============================================================================
 
-pushd "%~dp0\SplitPlay.XInputProxy"
+pushd "%~dp0\SplitRoast.XInputProxy"
 
 rem --- Locate Visual Studio / Build Tools via vswhere ---
 set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
@@ -74,7 +74,7 @@ if errorlevel 1 (
 cl /nologo /O2 /MT /LD /EHsc /I minhook\include proxy.cpp ^
     minhook\src\buffer.c minhook\src\hook.c minhook\src\trampoline.c ^
     minhook\src\hde\hde32.c minhook\src\hde\hde64.c ^
-    /Fe:"%~2\SplitPlay.XInputProxy.dll" /link /DEF:exports.def
+    /Fe:"%~2\SplitRoast.XInputProxy.dll" /link /DEF:exports.def
 if errorlevel 1 (
     echo [ERROR] Compilation for %~1 failed.
     endlocal & exit /b 1

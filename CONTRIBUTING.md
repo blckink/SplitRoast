@@ -1,14 +1,14 @@
-# Contributing to SplitPlay
+# Contributing to SplitRoast
 
-First off: thanks. SplitPlay is an early MVP, which is a polite way of saying there
+First off: thanks. SplitRoast is an early MVP, which is a polite way of saying there
 is a *lot* of low-hanging fruit. You don't have to be a Win32 wizard to help.
 
 ## The single most useful thing you can do
 
-**Tell us whether it works on a game.** SplitPlay has been properly verified on
+**Tell us whether it works on a game.** SplitRoast has been properly verified on
 exactly one game so far. Every honest "it works on X" / "it breaks on Y, here's what
 happened" report is gold. Open an issue with the
-[bug report template](.github/ISSUE_TEMPLATE/bug_report_app.yml) and include:
+[bug report template](.github/ISSUE_TEMPLATE/bug_report.yml) and include:
 
 - The game (and its Steam App ID if you have it).
 - What you picked (split orientation, display, controllers).
@@ -30,10 +30,10 @@ cross-platform build).
 
 ```powershell
 # build everything
-dotnet build SplitPlay.sln
+dotnet build SplitRoast.sln
 
 # run the app
-dotnet run --project src/SplitPlay.App/SplitPlay.App.csproj
+dotnet run --project src/SplitRoast.App/SplitRoast.App.csproj
 ```
 
 For controller isolation, build the native proxy once (needs the C++ build tools):
@@ -59,13 +59,13 @@ models) is the easiest place to start and the easiest to test.
 
 1. Branch from the current development branch.
 2. Keep PRs focused — one logical change is easier to review (and revert) than ten.
-3. Make sure `dotnet build SplitPlay.sln -c Release` is clean; CI builds the whole
+3. Make sure `dotnet build SplitRoast.sln -c Release` is clean; CI builds the whole
    thing on a real Windows runner and will tattle on you otherwise.
 4. Describe **what** changed and **why**. If you verified it on a game, say which.
 
 ## Licensing of contributions
 
-SplitPlay is **GPL-3.0**. By contributing, you agree your contribution is licensed
+SplitRoast is **GPL-3.0**. By contributing, you agree your contribution is licensed
 under the same terms. Don't paste in code you don't have the rights to — if you're
 adapting something, flag it in the PR so we can credit it properly in
 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).

@@ -1,9 +1,9 @@
 <#
 .SYNOPSIS
-    One-command release builder for SplitPlay.
+    One-command release builder for SplitRoast.
 
 .DESCRIPTION
-    Produces a ready-to-share installer (installer\output\SplitPlaySetup.exe) and
+    Produces a ready-to-share installer (installer\output\SplitRoastSetup.exe) and
     installs every tool it needs along the way - nothing has to be installed by
     hand first. Steps:
 
@@ -12,7 +12,7 @@
            - Visual C++ Build Tools (for the native XInput proxy)
            - Inno Setup 6 (to build the installer)
       2. Build the native XInput proxy (x64 + x86).
-      3. Publish SplitPlay self-contained (bundles the .NET runtime, the test
+      3. Publish SplitRoast self-contained (bundles the .NET runtime, the test
          window and the proxy) so the end user needs no tools at all.
       4. Compile the installer.
 
@@ -52,12 +52,12 @@ $InstallerDir = $PSScriptRoot
 $Root         = Split-Path -Parent $InstallerDir          # repository root
 $Staging      = Join-Path $InstallerDir "staging\app"
 $OutputDir    = Join-Path $InstallerDir "output"
-$AppProj      = Join-Path $Root "src\SplitPlay.App\SplitPlay.App.csproj"
-$TestProj     = Join-Path $Root "src\SplitPlay.TestTarget\SplitPlay.TestTarget.csproj"
+$AppProj      = Join-Path $Root "src\SplitRoast.App\SplitRoast.App.csproj"
+$TestProj     = Join-Path $Root "src\SplitRoast.TestTarget\SplitRoast.TestTarget.csproj"
 $ProxyBuild   = Join-Path $Root "native\build-proxy.cmd"
-$ProxyBinX64  = Join-Path $Root "native\bin\x64\SplitPlay.XInputProxy.dll"
-$ProxyBinX86  = Join-Path $Root "native\bin\x86\SplitPlay.XInputProxy.dll"
-$IssFile      = Join-Path $InstallerDir "SplitPlay.iss"
+$ProxyBinX64  = Join-Path $Root "native\bin\x64\SplitRoast.XInputProxy.dll"
+$ProxyBinX86  = Join-Path $Root "native\bin\x86\SplitRoast.XInputProxy.dll"
+$IssFile      = Join-Path $InstallerDir "SplitRoast.iss"
 
 function Write-Step([string]$text) {
     Write-Host ""
@@ -172,7 +172,7 @@ if (-not (Test-Path $ProxyBinX64) -or -not (Test-Path $ProxyBinX86)) {
 }
 
 # --- 3. Publish self-contained ---------------------------------------------
-Write-Step "Publishing SplitPlay (self-contained)"
+Write-Step "Publishing SplitRoast (self-contained)"
 if (Test-Path $Staging) { Remove-Item $Staging -Recurse -Force }
 New-Item -ItemType Directory -Path $Staging -Force | Out-Null
 
@@ -205,7 +205,7 @@ if (Test-Path $goldbergSrc) {
 }
 
 # Bundle the license + third-party notices so the distributed build is compliant
-# (SplitPlay is GPL-3.0; it ships LGPL/BSD third-party components).
+# (SplitRoast is GPL-3.0; it ships LGPL/BSD third-party components).
 foreach ($doc in @("LICENSE", "THIRD-PARTY-NOTICES.md")) {
     $docSrc = Join-Path $Root $doc
     if (Test-Path $docSrc) { Copy-Item $docSrc (Join-Path $Staging $doc) -Force }
@@ -226,9 +226,9 @@ if (Test-Path $propsPath) {
 & $Iscc "/DStaging=$Staging" "/DAppVersion=$version" $IssFile
 if ($LASTEXITCODE -ne 0) { throw "Inno Setup compilation failed." }
 
-$setup = Join-Path $OutputDir "SplitPlaySetup.exe"
+$setup = Join-Path $OutputDir "SplitRoastSetup.exe"
 Write-Step "Done"
 Write-Host "Installer created:" -ForegroundColor Green
 Write-Host "  $setup"
 Write-Host ""
-Write-Host "Share that single file - it installs SplitPlay with no extra tools required."
+Write-Host "Share that single file - it installs SplitRoast with no extra tools required."

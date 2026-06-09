@@ -1,12 +1,12 @@
 <#
 .SYNOPSIS
-    One-shot setup + run for SplitPlay.
+    One-shot setup + run for SplitRoast.
 
 .DESCRIPTION
     Gets everything ready on a fresh Windows PC and launches the app:
       1. Keeps the machine awake (no sleep-stalled installs).
       2. Installs the .NET 8 SDK via winget if it is missing (self-elevates once).
-      3. Builds and runs SplitPlay so you can test it immediately.
+      3. Builds and runs SplitRoast so you can test it immediately.
 
     Controller isolation needs the native proxy (C++ tools) - that is a separate,
     longer step; run this with -Installer to do the full pipeline instead, or see
@@ -15,7 +15,7 @@
 
 .PARAMETER Installer
     Run the full release pipeline (installs C++ tools, builds the proxy, produces
-    SplitPlaySetup.exe) instead of just building and running the app.
+    SplitRoastSetup.exe) instead of just building and running the app.
 
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File setup.ps1
@@ -25,7 +25,7 @@ param([switch]$Installer)
 
 $ErrorActionPreference = "Stop"
 $Here   = $PSScriptRoot                       # repository root
-$AppProj = Join-Path $Here "src\SplitPlay.App\SplitPlay.App.csproj"
+$AppProj = Join-Path $Here "src\SplitRoast.App\SplitRoast.App.csproj"
 
 function Step($t) { Write-Host "`n==> $t" -ForegroundColor Cyan }
 
@@ -59,8 +59,8 @@ function Test-Admin {
 # --- Sanity: are we in the right place? ------------------------------------
 if (-not (Test-Path $AppProj)) {
     Write-Host "ERROR: Could not find $AppProj" -ForegroundColor Red
-    Write-Host "Run this from the root of the SplitPlay repository (the folder that" -ForegroundColor Red
-    Write-Host "contains SplitPlay.sln, src\, native\ and installer\)." -ForegroundColor Red
+    Write-Host "Run this from the root of the SplitRoast repository (the folder that" -ForegroundColor Red
+    Write-Host "contains SplitRoast.sln, src\, native\ and installer\)." -ForegroundColor Red
     exit 1
 }
 
@@ -96,6 +96,6 @@ if ($Installer) {
 }
 
 # --- 2b. Build and run the app ---------------------------------------------
-Step "Building and launching SplitPlay"
+Step "Building and launching SplitRoast"
 Write-Host "    (first build downloads NuGet packages - this can take a minute)" -ForegroundColor DarkGray
 & $Dotnet run --project $AppProj -c Release

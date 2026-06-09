@@ -1,5 +1,5 @@
 name: "✨ Feature request"
-description: Suggest an improvement or a new capability for SplitPlay.
+description: Suggest an improvement or a new capability for SplitRoast.
 title: "✨ <short description>"
 labels: ["enhancement"]
 body:
@@ -19,7 +19,7 @@ body:
     id: proposal
     attributes:
       label: Proposed solution
-      description: What would you like SplitPlay to do?
+      description: What would you like SplitRoast to do?
     validations:
       required: true
 

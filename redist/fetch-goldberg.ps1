@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Downloads the Steam emulator (gbe_fork) and places the DLLs where SplitPlay
+    Downloads the Steam emulator (gbe_fork) and places the DLLs where SplitRoast
     expects them: redist\goldberg\x64\steam_api64.dll and x86\steam_api.dll.
 
 .DESCRIPTION
@@ -15,7 +15,7 @@
 param([string]$OutDir = (Join-Path $PSScriptRoot "goldberg"))
 
 $ErrorActionPreference = "Stop"
-$headers = @{ "User-Agent" = "splitplay-ci"; "Accept" = "application/vnd.github+json" }
+$headers = @{ "User-Agent" = "splitroast-ci"; "Accept" = "application/vnd.github+json" }
 
 # GitHub's release/CDN endpoints occasionally return transient 5xx/timeouts.
 # Retry network operations with exponential backoff so a flaky download does
@@ -68,7 +68,7 @@ Invoke-WithRetry -What "download $($asset.name)" -MaxAttempts 6 -Action {
     }
     catch {
         Write-Host "    browser URL failed ($($_.Exception.Message)); trying the API asset endpoint..."
-        $apiHeaders = @{ "User-Agent" = "splitplay-ci"; "Accept" = "application/octet-stream" }
+        $apiHeaders = @{ "User-Agent" = "splitroast-ci"; "Accept" = "application/octet-stream" }
         Invoke-WebRequest $apiAssetUrl -OutFile $archive -Headers $apiHeaders
     }
 }
@@ -113,12 +113,12 @@ if ($emuLicense) {
 }
 @"
 This folder contains the gbe_fork Steam emulator (a fork of the Goldberg
-Steam Emulator), used by SplitPlay UNMODIFIED for single-account local co-op.
+Steam Emulator), used by SplitRoast UNMODIFIED for single-account local co-op.
 
   Source / upstream: https://github.com/Detanup01/gbe_fork
   License:           LGPL-3.0 (see LICENSE-gbe_fork.txt, if present, and upstream)
 
-SplitPlay does not modify these binaries. They are loaded dynamically as separate
+SplitRoast does not modify these binaries. They are loaded dynamically as separate
 DLL files. The corresponding source is available at the upstream URL above.
 "@ | Set-Content -Path (Join-Path $OutDir "NOTICE.txt") -Encoding UTF8
 
