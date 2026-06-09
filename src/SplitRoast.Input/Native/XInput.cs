@@ -13,6 +13,12 @@ internal static class XInput
 
     public const int ErrorSuccess = 0;
 
+    /// <summary>Capability flag: the device is wireless.</summary>
+    public const ushort CapsWireless = 0x0002;
+
+    /// <summary>Battery query device type: gamepad.</summary>
+    public const byte BatteryDevTypeGamepad = 0x00;
+
     // xinput1_4.dll ships with Windows 8+. On the supported OS range it is always
     // present, so we bind to it directly.
     [DllImport("xinput1_4.dll", EntryPoint = "XInputGetState")]
@@ -20,6 +26,12 @@ internal static class XInput
 
     [DllImport("xinput1_4.dll", EntryPoint = "XInputSetState")]
     public static extern int XInputSetState(int dwUserIndex, ref XINPUT_VIBRATION pVibration);
+
+    [DllImport("xinput1_4.dll", EntryPoint = "XInputGetCapabilities")]
+    public static extern int XInputGetCapabilities(int dwUserIndex, int dwFlags, out XINPUT_CAPABILITIES pCapabilities);
+
+    [DllImport("xinput1_4.dll", EntryPoint = "XInputGetBatteryInformation")]
+    public static extern int XInputGetBatteryInformation(int dwUserIndex, byte devType, out XINPUT_BATTERY_INFORMATION pBatteryInformation);
 
     [StructLayout(LayoutKind.Sequential)]
     public struct XINPUT_STATE
@@ -45,5 +57,22 @@ internal static class XInput
     {
         public ushort wLeftMotorSpeed;
         public ushort wRightMotorSpeed;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct XINPUT_CAPABILITIES
+    {
+        public byte Type;
+        public byte SubType;
+        public ushort Flags;
+        public XINPUT_GAMEPAD Gamepad;
+        public XINPUT_VIBRATION Vibration;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct XINPUT_BATTERY_INFORMATION
+    {
+        public byte BatteryType;
+        public byte BatteryLevel;
     }
 }

@@ -17,6 +17,7 @@ public sealed class GameTileViewModel : ObservableObject
     private const int CoverDecodeWidth = 240;
 
     private ImageSource? _cover;
+    private GameCoopInfo _coop = GameCoopInfo.Unknown;
 
     public GameTileViewModel(SteamGame game)
     {
@@ -47,5 +48,24 @@ public sealed class GameTileViewModel : ObservableObject
         Game.Artwork = artwork;
         Cover = ImageLoader.TryLoad(artwork.LibraryCapsulePath, CoverDecodeWidth);
         OnPropertyChanged(nameof(HasCover));
+    }
+
+    /// <summary>Co-op suitability for the corner badge.</summary>
+    public CoopSuitability Suitability => _coop.Suitability;
+
+    /// <summary>Compact badge label (e.g. "Online co-op"). Empty when unknown.</summary>
+    public string BadgeText => _coop.ShortLabel;
+
+    /// <summary>True when there is a meaningful badge to show.</summary>
+    public bool HasBadge =>
+        _coop.Suitability != CoopSuitability.Unknown && !string.IsNullOrEmpty(_coop.ShortLabel);
+
+    /// <summary>Applies a resolved suitability verdict (call on the UI thread).</summary>
+    public void ApplySuitability(GameCoopInfo info)
+    {
+        _coop = info;
+        OnPropertyChanged(nameof(Suitability));
+        OnPropertyChanged(nameof(BadgeText));
+        OnPropertyChanged(nameof(HasBadge));
     }
 }
