@@ -49,8 +49,6 @@ public sealed class GameDetailViewModel : PageViewModel
     private int _progress;
     private bool _isLaunching;
     private bool _isSessionActive;
-    private bool _closeSingleInstanceLock;
-    private string _singleInstanceMutexNames = string.Empty;
 
     public GameDetailViewModel(
         IGameProfileStore profileStore,
@@ -230,34 +228,6 @@ public sealed class GameDetailViewModel : PageViewModel
         }
     }
 
-    /// <summary>
-    /// When on, SplitRoast closes single-instance locks so a stubborn game opens a
-    /// second time. Persisted to the profile.
-    /// </summary>
-    public bool CloseSingleInstanceLock
-    {
-        get => _closeSingleInstanceLock;
-        set
-        {
-            if (SetProperty(ref _closeSingleInstanceLock, value))
-            {
-                PersistProfile();
-            }
-        }
-    }
-
-    /// <summary>Optional, advanced: specific mutex name(s) to close (comma-separated).</summary>
-    public string SingleInstanceMutexNames
-    {
-        get => _singleInstanceMutexNames;
-        set
-        {
-            if (SetProperty(ref _singleInstanceMutexNames, value ?? string.Empty))
-            {
-                PersistProfile();
-            }
-        }
-    }
 
     /// <summary>
     /// Loads the game's profile, populates displays and controllers, and restores
@@ -282,8 +252,6 @@ public sealed class GameDetailViewModel : PageViewModel
             Orientation = _profile.Orientation;
             UseTestWindows = _profile.UseTestWindows;
             IsolateControllers = _profile.IsolateControllers;
-            CloseSingleInstanceLock = _profile.CloseSingleInstanceLock;
-            SingleInstanceMutexNames = _profile.SingleInstanceMutexNames ?? string.Empty;
             RestoreControllerSelections();
             UpdateRegionInfo();
 
@@ -402,9 +370,6 @@ public sealed class GameDetailViewModel : PageViewModel
         _profile.Orientation = Orientation;
         _profile.UseTestWindows = UseTestWindows;
         _profile.IsolateControllers = IsolateControllers;
-        _profile.CloseSingleInstanceLock = CloseSingleInstanceLock;
-        _profile.SingleInstanceMutexNames =
-            string.IsNullOrWhiteSpace(SingleInstanceMutexNames) ? null : SingleInstanceMutexNames.Trim();
         _profile.TargetDisplayIndex =
             SelectedDisplay is null ? null : Displays.IndexOf(SelectedDisplay);
 

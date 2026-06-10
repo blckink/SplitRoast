@@ -58,22 +58,6 @@ public sealed class GameProfile
     /// </summary>
     public bool IsolateControllers { get; set; } = true;
 
-    /// <summary>
-    /// When true, SplitRoast closes single-instance locks (named mutexes) held by
-    /// already-running instances so the next copy is allowed to start. Off by
-    /// default: most mirrored games don't need it, and it only acts on the processes
-    /// SplitRoast launched. Enable it for a game that refuses to open a second time.
-    /// </summary>
-    public bool CloseSingleInstanceLock { get; set; }
-
-    /// <summary>
-    /// Optional, advanced: specific mutex name(s) to close (comma- or
-    /// semicolon-separated), matching how Nucleus handlers name them (e.g.
-    /// "hl2_singleton_mutex"). When empty and <see cref="CloseSingleInstanceLock"/>
-    /// is on, SplitRoast closes any named mutex held by the launched instances.
-    /// </summary>
-    public string? SingleInstanceMutexNames { get; set; }
-
     /// <summary>Creates a fresh profile with default settings for an app id.</summary>
     public static GameProfile CreateDefault(uint appId) => new() { AppId = appId };
 }

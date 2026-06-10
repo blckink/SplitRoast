@@ -165,9 +165,31 @@ public sealed class RealLaunchEngine : ILaunchEngine
         var placed = new List<(IntPtr Handle, ScreenRegion Region)>();
         var routes = new List<(string PadFile, int Slot)>();
 
-        // Processes we start (games and any test windows) so the session can stop them.
+        // Every process we start (games + any test windows) so the session can stop
+        // them; gameProcesses also drives automatic single-instance recovery.
         var processes = new List<Process>();
-        IReadOnlyList<string> mutexNames = ParseMutexNames(request.Profile.SingleInstanceMutexNames);
+        var gameProcesses = new List<Process>();
+
+        // Launches one real game instance (mirrored or direct) and locates its window.
+        async Task<(IntPtr Handle, Process? Process, string? PadFile)> LaunchRealInstanceAsync(
+            PlayerLaunchTarget t, int idx)
+        {
+            if (emulatorReady)
+            {
+                (IntPtr h, string? pf, Process? p) = await StartMirroredInstanceAsync(
+                    request.Game, recipe!, t, idx, arch, cancellationToken);
+                return (h, p, pf);
+            }
+
+            // Direct mode: launch the original folder in place. Window enforcement
+            // still applies through the proxy; live pad routing is skipped because
+            // both instances share one folder.
+            Process? proc = StartGameProcess(
+                exePath!, Path.GetDirectoryName(exePath!)!, string.Empty,
+                t.ControllerIndex, directIsolated, request.Game.AppId, padFile: null, region: t.Region);
+            IntPtr located = await TryLaunchAndLocateAsync(proc, GameWindowTimeout, cancellationToken);
+            return (located, proc, null);
+        }
 
         for (int i = 0; i < total; i++)
         {
@@ -178,36 +200,47 @@ public sealed class RealLaunchEngine : ILaunchEngine
 
             IntPtr handle = IntPtr.Zero;
             Process? instanceProcess = null;
+            string? padFile = null;
 
             if (!testMode && exePath is not null)
             {
-                if (emulatorReady)
+                (handle, instanceProcess, padFile) = await LaunchRealInstanceAsync(target, i);
+
+                // Automatic single-instance recovery: a second copy that exits before
+                // it ever shows a window has almost certainly hit a single-instance
+                // lock held by an earlier copy. Free that lock and retry this one -
+                // no per-game setting required, and only when we actually detect it.
+                if (handle == IntPtr.Zero && instanceProcess is not null && HasExited(instanceProcess)
+                    && gameProcesses.Any(p => !HasExited(p)))
                 {
-                    (IntPtr mirrorHandle, string? padFile, Process? mirrorProcess) =
-                        await StartMirroredInstanceAsync(
-                            request.Game, recipe!, target, i, arch, cancellationToken);
-                    handle = mirrorHandle;
-                    instanceProcess = mirrorProcess;
-                    if (padFile is not null)
+                    progress?.Report(new LaunchProgress(
+                        percent, $"Player {i + 1} closed itself (single-instance lock); freeing it and retrying..."));
+
+                    int freed = 0;
+                    foreach (Process earlier in gameProcesses.Where(p => !HasExited(p)))
                     {
-                        routes.Add((padFile, target.ControllerIndex));
+                        freed += MutexKiller.CloseSingleInstanceLocks(earlier.Id);
                     }
-                }
-                else
-                {
-                    // Direct mode: launch the original folder in place. Window
-                    // enforcement still applies through the proxy; live pad routing
-                    // is skipped because both instances share one folder.
-                    instanceProcess = StartGameProcess(
-                        exePath, Path.GetDirectoryName(exePath)!, string.Empty,
-                        target.ControllerIndex, directIsolated, request.Game.AppId,
-                        padFile: null, region: target.Region);
-                    handle = await TryLaunchAndLocateAsync(instanceProcess, GameWindowTimeout, cancellationToken);
+
+                    if (freed > 0)
+                    {
+                        (handle, instanceProcess, padFile) = await LaunchRealInstanceAsync(target, i);
+                        if (handle != IntPtr.Zero)
+                        {
+                            notes.Add($"{target.Player.DisplayName}: cleared a single-instance lock to open a second copy.");
+                        }
+                    }
                 }
 
                 if (instanceProcess is not null)
                 {
                     processes.Add(instanceProcess);
+                    gameProcesses.Add(instanceProcess);
+                }
+
+                if (padFile is not null)
+                {
+                    routes.Add((padFile, target.ControllerIndex));
                 }
 
                 if (handle == IntPtr.Zero)
@@ -239,16 +272,6 @@ public sealed class RealLaunchEngine : ILaunchEngine
 
             _windowManager.PlaceBorderless(handle, target.Region);
             placed.Add((handle, target.Region));
-
-            // Free this instance's single-instance lock so the next copy can start.
-            if (!testMode && instanceProcess is not null && request.Profile.CloseSingleInstanceLock)
-            {
-                int closedLocks = MutexKiller.CloseSingleInstanceLocks(instanceProcess.Id, mutexNames);
-                if (closedLocks > 0)
-                {
-                    notes.Add($"Released {closedLocks} single-instance lock(s) for {target.Player.DisplayName}.");
-                }
-            }
 
             // Give a real game instance time to initialise before the next one.
             if (!testMode && exePath is not null && i < total - 1)
@@ -282,15 +305,11 @@ public sealed class RealLaunchEngine : ILaunchEngine
         return BuildResult(request, testMode, exePath, recipe, wantsEmulator, emulatorReady, directIsolated, notes);
     }
 
-    /// <summary>Splits the profile's mutex-name string on commas/semicolons.</summary>
-    private static IReadOnlyList<string> ParseMutexNames(string? raw)
+    /// <summary>Whether a process has exited, treating an inaccessible one as exited.</summary>
+    private static bool HasExited(Process process)
     {
-        if (string.IsNullOrWhiteSpace(raw))
-        {
-            return Array.Empty<string>();
-        }
-
-        return raw.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        try { return process.HasExited; }
+        catch { return true; }
     }
 
     /// <summary>
