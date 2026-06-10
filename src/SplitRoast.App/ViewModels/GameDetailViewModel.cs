@@ -48,6 +48,9 @@ public sealed class GameDetailViewModel : PageViewModel
     private bool _isolateControllers = true;
     private int _progress;
     private bool _isLaunching;
+    private bool _isSessionActive;
+    private bool _closeSingleInstanceLock;
+    private string _singleInstanceMutexNames = string.Empty;
 
     public GameDetailViewModel(
         IGameProfileStore profileStore,
@@ -77,6 +80,10 @@ public sealed class GameDetailViewModel : PageViewModel
         SetVerticalCommand = new RelayCommand(() => Orientation = SplitOrientation.Vertical);
         SetHorizontalCommand = new RelayCommand(() => Orientation = SplitOrientation.Horizontal);
         StartCommand = new AsyncRelayCommand(StartAsync, CanStart);
+        StopCommand = new AsyncRelayCommand(StopAsync, () => IsSessionActive);
+
+        _isSessionActive = _launchEngine.IsSessionActive;
+        _launchEngine.SessionStateChanged += OnSessionStateChanged;
     }
 
     public override string Title => _game?.Name ?? "Game";
@@ -101,6 +108,8 @@ public sealed class GameDetailViewModel : PageViewModel
     public RelayCommand SetHorizontalCommand { get; }
 
     public AsyncRelayCommand StartCommand { get; }
+
+    public AsyncRelayCommand StopCommand { get; }
 
     /// <summary>Background hero image for the detail header.</summary>
     public ImageSource? Hero
@@ -207,6 +216,49 @@ public sealed class GameDetailViewModel : PageViewModel
         private set => SetProperty(ref _isLaunching, value);
     }
 
+    /// <summary>True while a split-screen session this app launched is running.</summary>
+    public bool IsSessionActive
+    {
+        get => _isSessionActive;
+        private set
+        {
+            if (SetProperty(ref _isSessionActive, value))
+            {
+                StartCommand.RaiseCanExecuteChanged();
+                StopCommand.RaiseCanExecuteChanged();
+            }
+        }
+    }
+
+    /// <summary>
+    /// When on, SplitRoast closes single-instance locks so a stubborn game opens a
+    /// second time. Persisted to the profile.
+    /// </summary>
+    public bool CloseSingleInstanceLock
+    {
+        get => _closeSingleInstanceLock;
+        set
+        {
+            if (SetProperty(ref _closeSingleInstanceLock, value))
+            {
+                PersistProfile();
+            }
+        }
+    }
+
+    /// <summary>Optional, advanced: specific mutex name(s) to close (comma-separated).</summary>
+    public string SingleInstanceMutexNames
+    {
+        get => _singleInstanceMutexNames;
+        set
+        {
+            if (SetProperty(ref _singleInstanceMutexNames, value ?? string.Empty))
+            {
+                PersistProfile();
+            }
+        }
+    }
+
     /// <summary>
     /// Loads the game's profile, populates displays and controllers, and restores
     /// the saved configuration. Call once after the view model is resolved.
@@ -230,6 +282,8 @@ public sealed class GameDetailViewModel : PageViewModel
             Orientation = _profile.Orientation;
             UseTestWindows = _profile.UseTestWindows;
             IsolateControllers = _profile.IsolateControllers;
+            CloseSingleInstanceLock = _profile.CloseSingleInstanceLock;
+            SingleInstanceMutexNames = _profile.SingleInstanceMutexNames ?? string.Empty;
             RestoreControllerSelections();
             UpdateRegionInfo();
 
@@ -259,6 +313,7 @@ public sealed class GameDetailViewModel : PageViewModel
     public void Cleanup()
     {
         _gamepadService.GamepadsChanged -= OnGamepadsChanged;
+        _launchEngine.SessionStateChanged -= OnSessionStateChanged;
     }
 
     private void LoadDisplays()
@@ -347,6 +402,9 @@ public sealed class GameDetailViewModel : PageViewModel
         _profile.Orientation = Orientation;
         _profile.UseTestWindows = UseTestWindows;
         _profile.IsolateControllers = IsolateControllers;
+        _profile.CloseSingleInstanceLock = CloseSingleInstanceLock;
+        _profile.SingleInstanceMutexNames =
+            string.IsNullOrWhiteSpace(SingleInstanceMutexNames) ? null : SingleInstanceMutexNames.Trim();
         _profile.TargetDisplayIndex =
             SelectedDisplay is null ? null : Displays.IndexOf(SelectedDisplay);
 
@@ -378,7 +436,7 @@ public sealed class GameDetailViewModel : PageViewModel
     /// <summary>Start is allowed only with two distinct controllers assigned.</summary>
     private bool CanStart()
     {
-        if (IsLaunching || SelectedDisplay is null)
+        if (IsLaunching || IsSessionActive || SelectedDisplay is null)
         {
             return false;
         }
@@ -434,7 +492,29 @@ public sealed class GameDetailViewModel : PageViewModel
         finally
         {
             IsLaunching = false;
+            IsSessionActive = _launchEngine.IsSessionActive;
             StartCommand.RaiseCanExecuteChanged();
         }
     }
+
+    private async Task StopAsync()
+    {
+        StatusText = "Stopping session...";
+        try
+        {
+            await _launchEngine.StopAsync();
+            StatusText = "Session stopped.";
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Stop failed: {ex.Message}";
+        }
+        finally
+        {
+            IsSessionActive = _launchEngine.IsSessionActive;
+        }
+    }
+
+    private void OnSessionStateChanged(object? sender, EventArgs e) =>
+        Application.Current?.Dispatcher.Invoke(() => IsSessionActive = _launchEngine.IsSessionActive);
 }

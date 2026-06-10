@@ -33,14 +33,78 @@ public sealed class RealLaunchEngine : ILaunchEngine
     private readonly InputIsolationManager _isolation;
     private readonly IGamepadService _gamepads;
 
-    // Keeps controllers bound to their instance across disconnects. Replaced on
-    // each launch; the previous session's router is disposed first.
-    private ControllerRouter? _router;
+    // The currently running session (processes + router + isolation to tear down).
+    // Replaced on each launch; the previous one is stopped first.
+    private readonly object _sessionGate = new();
+    private GameSession? _session;
 
     public RealLaunchEngine(InputIsolationManager isolation, IGamepadService gamepads)
     {
         _isolation = isolation;
         _gamepads = gamepads;
+    }
+
+    public bool IsSessionActive
+    {
+        get { lock (_sessionGate) { return _session?.IsActive == true; } }
+    }
+
+    public event EventHandler? SessionStateChanged;
+
+    public async Task StopAsync(CancellationToken cancellationToken = default)
+    {
+        GameSession? session;
+        lock (_sessionGate)
+        {
+            session = _session;
+        }
+
+        if (session is not null)
+        {
+            await session.StopAsync().ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>Stops and clears any active session before a new launch.</summary>
+    private async Task StopActiveSessionAsync()
+    {
+        GameSession? previous;
+        lock (_sessionGate)
+        {
+            previous = _session;
+            _session = null;
+        }
+
+        if (previous is not null)
+        {
+            previous.Ended -= OnSessionEnded;
+            await previous.StopAsync().ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>Records a new session and notifies listeners it is active.</summary>
+    private void SetSession(GameSession session)
+    {
+        lock (_sessionGate)
+        {
+            _session = session;
+        }
+
+        session.Ended += OnSessionEnded;
+        SessionStateChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void OnSessionEnded(object? sender, EventArgs e)
+    {
+        lock (_sessionGate)
+        {
+            if (ReferenceEquals(_session, sender))
+            {
+                _session = null;
+            }
+        }
+
+        SessionStateChanged?.Invoke(this, EventArgs.Empty);
     }
 
     public async Task<LaunchResult> LaunchAsync(
@@ -66,6 +130,9 @@ public sealed class RealLaunchEngine : ILaunchEngine
     {
         bool testMode = request.Profile.UseTestWindows;
         int total = request.Targets.Count;
+
+        // Never run two sessions at once: cleanly tear down a previous one first.
+        await StopActiveSessionAsync();
 
         progress?.Report(new LaunchProgress(6, "Analyzing game..."));
         string? exePath = testMode
@@ -98,6 +165,10 @@ public sealed class RealLaunchEngine : ILaunchEngine
         var placed = new List<(IntPtr Handle, ScreenRegion Region)>();
         var routes = new List<(string PadFile, int Slot)>();
 
+        // Processes we start (games and any test windows) so the session can stop them.
+        var processes = new List<Process>();
+        IReadOnlyList<string> mutexNames = ParseMutexNames(request.Profile.SingleInstanceMutexNames);
+
         for (int i = 0; i < total; i++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -106,14 +177,17 @@ public sealed class RealLaunchEngine : ILaunchEngine
             progress?.Report(new LaunchProgress(percent, $"Launching player {i + 1} of {total}..."));
 
             IntPtr handle = IntPtr.Zero;
+            Process? instanceProcess = null;
 
             if (!testMode && exePath is not null)
             {
                 if (emulatorReady)
                 {
-                    (IntPtr mirrorHandle, string? padFile) = await StartMirroredInstanceAsync(
-                        request.Game, recipe!, target, i, arch, cancellationToken);
+                    (IntPtr mirrorHandle, string? padFile, Process? mirrorProcess) =
+                        await StartMirroredInstanceAsync(
+                            request.Game, recipe!, target, i, arch, cancellationToken);
                     handle = mirrorHandle;
+                    instanceProcess = mirrorProcess;
                     if (padFile is not null)
                     {
                         routes.Add((padFile, target.ControllerIndex));
@@ -124,11 +198,16 @@ public sealed class RealLaunchEngine : ILaunchEngine
                     // Direct mode: launch the original folder in place. Window
                     // enforcement still applies through the proxy; live pad routing
                     // is skipped because both instances share one folder.
-                    Process? proc = StartGameProcess(
+                    instanceProcess = StartGameProcess(
                         exePath, Path.GetDirectoryName(exePath)!, string.Empty,
                         target.ControllerIndex, directIsolated, request.Game.AppId,
                         padFile: null, region: target.Region);
-                    handle = await TryLaunchAndLocateAsync(proc, GameWindowTimeout, cancellationToken);
+                    handle = await TryLaunchAndLocateAsync(instanceProcess, GameWindowTimeout, cancellationToken);
+                }
+
+                if (instanceProcess is not null)
+                {
+                    processes.Add(instanceProcess);
                 }
 
                 if (handle == IntPtr.Zero)
@@ -145,8 +224,12 @@ public sealed class RealLaunchEngine : ILaunchEngine
                         "Test window helper (SplitRoast.TestTarget.exe) was not found next to the app.");
                 }
 
-                handle = await TryLaunchAndLocateAsync(
-                    StartTestWindow(testTargetPath, target, i), TestWindowTimeout, cancellationToken);
+                Process? testProcess = StartTestWindow(testTargetPath, target, i);
+                if (testProcess is not null)
+                {
+                    processes.Add(testProcess);
+                }
+                handle = await TryLaunchAndLocateAsync(testProcess, TestWindowTimeout, cancellationToken);
             }
 
             if (handle == IntPtr.Zero)
@@ -156,6 +239,16 @@ public sealed class RealLaunchEngine : ILaunchEngine
 
             _windowManager.PlaceBorderless(handle, target.Region);
             placed.Add((handle, target.Region));
+
+            // Free this instance's single-instance lock so the next copy can start.
+            if (!testMode && instanceProcess is not null && request.Profile.CloseSingleInstanceLock)
+            {
+                int closedLocks = MutexKiller.CloseSingleInstanceLocks(instanceProcess.Id, mutexNames);
+                if (closedLocks > 0)
+                {
+                    notes.Add($"Released {closedLocks} single-instance lock(s) for {target.Player.DisplayName}.");
+                }
+            }
 
             // Give a real game instance time to initialise before the next one.
             if (!testMode && exePath is not null && i < total - 1)
@@ -175,14 +268,29 @@ public sealed class RealLaunchEngine : ILaunchEngine
         // The game windows themselves are pinned to their region from inside the
         // game process by the proxy (it clamps WM_WINDOWPOSCHANGING), so no
         // polling watchdog is needed here.
-        if (!testMode && routes.Count > 0)
-        {
-            _router?.Dispose();
-            _router = new ControllerRouter(_gamepads, routes);
-        }
+        ControllerRouter? router = (!testMode && routes.Count > 0)
+            ? new ControllerRouter(_gamepads, routes)
+            : null;
+
+        // Hand everything we started to a session that owns the teardown: stop the
+        // games, dispose the router, and (direct mode only) restore the original game
+        // folder. Mirrored instances live in disposable copies that never touch the
+        // original, so they need no restore.
+        SetSession(new GameSession(processes, router, _isolation, restoreIsolationOnStop: directIsolated));
 
         progress?.Report(new LaunchProgress(100, "Ready."));
         return BuildResult(request, testMode, exePath, recipe, wantsEmulator, emulatorReady, directIsolated, notes);
+    }
+
+    /// <summary>Splits the profile's mutex-name string on commas/semicolons.</summary>
+    private static IReadOnlyList<string> ParseMutexNames(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return Array.Empty<string>();
+        }
+
+        return raw.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
     }
 
     /// <summary>
@@ -191,7 +299,7 @@ public sealed class RealLaunchEngine : ILaunchEngine
     /// window handle (or zero on failure) plus the path of the live pad-slot file
     /// the engine routes controllers through.
     /// </summary>
-    private async Task<(IntPtr Handle, string? PadFile)> StartMirroredInstanceAsync(
+    private async Task<(IntPtr Handle, string? PadFile, Process? Process)> StartMirroredInstanceAsync(
         SteamGame game, CoopRecipe recipe, PlayerLaunchTarget target, int playerIndex,
         ProcessArchitecture arch, CancellationToken cancellationToken)
     {
@@ -222,7 +330,7 @@ public sealed class RealLaunchEngine : ILaunchEngine
             padFile, target.Region);
 
         IntPtr handle = await _locator.WaitForMainWindowAsync(process, GameWindowTimeout, cancellationToken);
-        return (handle, handle != IntPtr.Zero ? padFile : null);
+        return (handle, handle != IntPtr.Zero ? padFile : null, process);
     }
 
     private async Task<IntPtr> TryLaunchAndLocateAsync(

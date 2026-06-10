@@ -193,6 +193,19 @@
                               Foreground="{StaticResource TextSecondaryBrush}"
                               ToolTip="Each instance only sees its assigned controller. Keyboard and mouse stay free." />
 
+                    <!-- Force second instance (single-instance lock / mutex) -->
+                    <CheckBox Content="Force second instance (close single-instance lock)"
+                              IsChecked="{Binding CloseSingleInstanceLock}" Margin="0,8,0,0"
+                              Foreground="{StaticResource TextSecondaryBrush}"
+                              ToolTip="For games that refuse to open twice. Closes the named mutex the first copy holds. Only affects the copies SplitRoast launches." />
+                    <StackPanel Margin="22,6,0,0"
+                                Visibility="{Binding CloseSingleInstanceLock, Converter={StaticResource BoolToVis}}">
+                        <TextBlock Text="Mutex name(s) — optional, comma-separated (leave empty for auto)"
+                                   Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" />
+                        <TextBox Text="{Binding SingleInstanceMutexNames}" Margin="0,4,0,0"
+                                 Padding="6,4" Width="320" HorizontalAlignment="Left" />
+                    </StackPanel>
+
                     <!-- Test mode -->
                     <CheckBox Content="Test mode (open placeholder windows, don't launch the game)"
                               IsChecked="{Binding UseTestWindows}" Margin="0,8,0,0"
@@ -202,6 +215,12 @@
                     <Button Content="Start Split-Screen" Style="{StaticResource PrimaryButtonStyle}"
                             Margin="0,12,0,0" HorizontalAlignment="Stretch"
                             Command="{Binding StartCommand}" />
+
+                    <!-- Stop (only while a session is running) -->
+                    <Button Content="Stop session" Style="{StaticResource SegmentButtonStyle}"
+                            Margin="0,8,0,0" HorizontalAlignment="Stretch" Padding="18,10"
+                            Command="{Binding StopCommand}"
+                            Visibility="{Binding IsSessionActive, Converter={StaticResource BoolToVis}}" />
 
                     <!-- Progress + status -->
                     <ProgressBar Height="6" Margin="0,12,0,0" Minimum="0" Maximum="100"
