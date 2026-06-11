@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
@@ -10,6 +12,8 @@ using SplitRoast.App.Mvvm;
 using SplitRoast.App.Services;
 using SplitRoast.Core.Abstractions;
 using SplitRoast.Core.Models;
+using SplitRoast.Launch.Coop;
+using SplitRoast.Launch.Diagnostics;
 
 namespace SplitRoast.App.ViewModels;
 
@@ -72,6 +76,60 @@ public sealed class GameDetailViewModel : PageViewModel
         SetVerticalCommand = new RelayCommand(() => Orientation = SplitOrientation.Vertical);
         SetHorizontalCommand = new RelayCommand(() => Orientation = SplitOrientation.Horizontal);
         StartCommand = new AsyncRelayCommand(StartAsync, CanStart);
+        OpenLogsCommand = new RelayCommand(OpenLogs);
+        RebuildInstancesCommand = new RelayCommand(RebuildInstances);
+    }
+
+    /// <summary>Opens this game's diagnostics folder (launch log, proxy logs, game log).</summary>
+    public RelayCommand OpenLogsCommand { get; }
+
+    /// <summary>Deletes this game's instance folders so they rebuild fresh next launch.</summary>
+    public RelayCommand RebuildInstancesCommand { get; }
+
+    private string _maintenanceStatus = string.Empty;
+    public string MaintenanceStatus
+    {
+        get => _maintenanceStatus;
+        private set => SetProperty(ref _maintenanceStatus, value);
+    }
+
+    private void OpenLogs()
+    {
+        if (_game is null)
+        {
+            return;
+        }
+
+        try
+        {
+            string folder = LaunchDiagnostics.FolderFor(_game.AppId);
+            Directory.CreateDirectory(folder);
+            Process.Start(new ProcessStartInfo("explorer.exe", $"\"{folder}\"") { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            MaintenanceStatus = $"Could not open logs: {ex.Message}";
+        }
+    }
+
+    private void RebuildInstances()
+    {
+        if (_game is null)
+        {
+            return;
+        }
+
+        try
+        {
+            bool deleted = InstanceMirror.DeleteInstances(_game.LibraryPath, _game.AppId);
+            MaintenanceStatus = deleted
+                ? "Instances cleared — they rebuild on the next start. Savegames are untouched."
+                : "No instances to clear.";
+        }
+        catch (Exception ex)
+        {
+            MaintenanceStatus = $"Could not clear instances: {ex.Message}";
+        }
     }
 
     public override string Title => _game?.Name ?? "Game";
