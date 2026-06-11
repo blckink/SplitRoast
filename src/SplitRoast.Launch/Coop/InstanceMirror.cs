@@ -22,6 +22,23 @@ public static class InstanceMirror
         Path.Combine(GetInstancesRoot(libraryPath, appId), $"p{playerIndex + 1}");
 
     /// <summary>
+    /// Deletes all of a game's instance folders so they are rebuilt fresh on the
+    /// next launch. Always safe for savegames: games store saves under
+    /// %AppData%\LocalLow (per Steam id), NOT inside the mirror.
+    /// </summary>
+    public static bool DeleteInstances(string libraryPath, uint appId)
+    {
+        string root = GetInstancesRoot(libraryPath, appId);
+        if (!Directory.Exists(root))
+        {
+            return false;
+        }
+
+        Directory.Delete(root, recursive: true);
+        return true;
+    }
+
+    /// <summary>
     /// Mirrors <paramref name="sourceDir"/> into <paramref name="instanceDir"/> using
     /// hard links (falling back to a copy if a hard link can't be made). Existing
     /// files are left in place so repeat launches are fast.

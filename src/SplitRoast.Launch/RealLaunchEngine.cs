@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using SplitRoast.Core.Abstractions;
 using SplitRoast.Core.Models;
 using SplitRoast.Launch.Coop;
+using SplitRoast.Launch.Diagnostics;
 using SplitRoast.Launch.InputIsolation;
 
 namespace SplitRoast.Launch;
@@ -67,6 +68,11 @@ public sealed class RealLaunchEngine : ILaunchEngine
         bool testMode = request.Profile.UseTestWindows;
         int total = request.Targets.Count;
 
+        var diag = new LaunchDiagnostics(request.Game.AppId, request.Game.Name);
+        diag.Log($"Launch requested: {total} players, " +
+                 $"{request.Profile.Orientation.ToString().ToLowerInvariant()} split, " +
+                 $"testMode={testMode}.");
+
         progress?.Report(new LaunchProgress(6, "Analyzing game..."));
         string? exePath = testMode
             ? null
@@ -85,6 +91,9 @@ public sealed class RealLaunchEngine : ILaunchEngine
         bool wantsEmulator = recipe?.UsesSteam == true &&
                              request.Profile.InstanceStrategy != InstanceStrategy.DualSteamAccounts;
         bool emulatorReady = wantsEmulator && GoldbergLocator.CanServe(recipe!);
+
+        diag.Log($"Analysis: exe='{exePath ?? "(none)"}', arch={arch}, engine={recipe?.Engine.ToString() ?? "n/a"}, " +
+                 $"usesSteam={recipe?.UsesSteam == true}, wantsEmulator={wantsEmulator}, emulatorReady={emulatorReady}.");
 
         // Direct mode (no mirroring): install the proxy into the original folder once.
         bool directIsolated = false;
@@ -106,14 +115,16 @@ public sealed class RealLaunchEngine : ILaunchEngine
             progress?.Report(new LaunchProgress(percent, $"Launching player {i + 1} of {total}..."));
 
             IntPtr handle = IntPtr.Zero;
+            bool gameStarted = false;
 
             if (!testMode && exePath is not null)
             {
                 if (emulatorReady)
                 {
-                    (IntPtr mirrorHandle, string? padFile) = await StartMirroredInstanceAsync(
-                        request.Game, recipe!, target, i, arch, cancellationToken);
+                    (IntPtr mirrorHandle, string? padFile, bool started) = await StartMirroredInstanceAsync(
+                        request.Game, recipe!, target, i, arch, diag, cancellationToken);
                     handle = mirrorHandle;
+                    gameStarted = started;
                     if (padFile is not null)
                     {
                         routes.Add((padFile, target.ControllerIndex));
@@ -128,34 +139,51 @@ public sealed class RealLaunchEngine : ILaunchEngine
                         exePath, Path.GetDirectoryName(exePath)!, string.Empty,
                         target.ControllerIndex, directIsolated, request.Game.AppId,
                         padFile: null, region: target.Region);
+                    gameStarted = proc is not null;
+                    diag.Log($"player {i + 1}: direct launch {(gameStarted ? "started pid " + proc!.Id : "FAILED to start")}.");
                     handle = await TryLaunchAndLocateAsync(proc, GameWindowTimeout, cancellationToken);
                 }
 
-                if (handle == IntPtr.Zero)
+                if (handle == IntPtr.Zero && gameStarted)
                 {
-                    notes.Add($"{target.Player.DisplayName}: game window not detected, used a test window.");
+                    // The game IS running, we just couldn't grab its top window in time
+                    // (common with borderless/fullscreen titles). The in-game proxy pins
+                    // the window to the split region itself, so do NOT spawn a test
+                    // window - that was the cause of stray "Player 1/2" windows.
+                    diag.Log($"player {i + 1}: window not located in time; leaving it to the in-game proxy to position.");
+                    notes.Add($"{target.Player.DisplayName}: launched (positioned by the in-game helper).");
                 }
             }
 
-            if (handle == IntPtr.Zero)
+            // Only fall back to a test window when the real game did NOT start at all.
+            if (handle == IntPtr.Zero && !gameStarted)
             {
                 if (testTargetPath is null)
                 {
+                    diag.Log("Test window helper (SplitRoast.TestTarget.exe) not found next to the app.");
                     return LaunchResult.Fail(
                         "Test window helper (SplitRoast.TestTarget.exe) was not found next to the app.");
                 }
 
+                if (!testMode)
+                {
+                    diag.Log($"player {i + 1}: game did not start; using a test window.");
+                }
                 handle = await TryLaunchAndLocateAsync(
                     StartTestWindow(testTargetPath, target, i), TestWindowTimeout, cancellationToken);
+
+                if (handle == IntPtr.Zero)
+                {
+                    diag.Log($"player {i + 1}: could not obtain any window.");
+                    return LaunchResult.Fail($"Could not obtain a window for {target.Player.DisplayName}.");
+                }
             }
 
-            if (handle == IntPtr.Zero)
+            if (handle != IntPtr.Zero)
             {
-                return LaunchResult.Fail($"Could not obtain a window for {target.Player.DisplayName}.");
+                _windowManager.PlaceBorderless(handle, target.Region);
+                placed.Add((handle, target.Region));
             }
-
-            _windowManager.PlaceBorderless(handle, target.Region);
-            placed.Add((handle, target.Region));
 
             // Give a real game instance time to initialise before the next one.
             if (!testMode && exePath is not null && i < total - 1)
@@ -181,8 +209,21 @@ public sealed class RealLaunchEngine : ILaunchEngine
             _router = new ControllerRouter(_gamepads, routes);
         }
 
+        // Gather the per-instance proxy logs and the game's own log into the
+        // diagnostics folder so the player can inspect a crash from the detail page.
+        if (!testMode)
+        {
+            await Task.Delay(1500, cancellationToken); // let logs flush
+            diag.CollectProxyLogs(InstanceMirror.GetInstancesRoot(request.Game.LibraryPath, request.Game.AppId));
+            diag.CollectGameLog(request.Game.Name);
+        }
+
+        LaunchResult result =
+            BuildResult(request, testMode, exePath, recipe, wantsEmulator, emulatorReady, directIsolated, notes);
+        diag.Log($"Result: {(result.Success ? "OK" : "FAILED")} — {result.Message}");
+
         progress?.Report(new LaunchProgress(100, "Ready."));
-        return BuildResult(request, testMode, exePath, recipe, wantsEmulator, emulatorReady, directIsolated, notes);
+        return result;
     }
 
     /// <summary>
@@ -191,9 +232,9 @@ public sealed class RealLaunchEngine : ILaunchEngine
     /// window handle (or zero on failure) plus the path of the live pad-slot file
     /// the engine routes controllers through.
     /// </summary>
-    private async Task<(IntPtr Handle, string? PadFile)> StartMirroredInstanceAsync(
+    private async Task<(IntPtr Handle, string? PadFile, bool Started)> StartMirroredInstanceAsync(
         SteamGame game, CoopRecipe recipe, PlayerLaunchTarget target, int playerIndex,
-        ProcessArchitecture arch, CancellationToken cancellationToken)
+        ProcessArchitecture arch, LaunchDiagnostics diag, CancellationToken cancellationToken)
     {
         string instanceDir = InstanceMirror.GetInstanceDir(game.LibraryPath, game.AppId, playerIndex);
         InstanceMirror.Mirror(recipe.SourceInstallDir, instanceDir);
@@ -220,9 +261,19 @@ public sealed class RealLaunchEngine : ILaunchEngine
         Process? process = StartGameProcess(
             exeInInstance, exeDir, args, target.ControllerIndex, isolated, game.AppId,
             padFile, target.Region);
+        bool started = process is not null;
 
-        IntPtr handle = await _locator.WaitForMainWindowAsync(process, GameWindowTimeout, cancellationToken);
-        return (handle, handle != IntPtr.Zero ? padFile : null);
+        diag.Log($"player {playerIndex + 1}: mirrored -> {instanceDir}; emulator applied; " +
+                 $"proxy {(isolated ? "deployed" : "NOT deployed")}; " +
+                 $"process {(started ? "started pid " + process!.Id : "FAILED to start")}.");
+
+        IntPtr handle = started
+            ? await _locator.WaitForMainWindowAsync(process!, GameWindowTimeout, cancellationToken)
+            : IntPtr.Zero;
+
+        // Route this controller whenever the instance is actually running and isolated,
+        // even if we never grabbed its window (borderless games still need isolation).
+        return (handle, (isolated && started) ? padFile : null, started);
     }
 
     private async Task<IntPtr> TryLaunchAndLocateAsync(
