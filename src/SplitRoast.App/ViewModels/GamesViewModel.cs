@@ -18,6 +18,7 @@ public sealed class GamesViewModel : PageViewModel
 {
     private readonly ISteamLibraryScanner _scanner;
     private readonly IGameArtworkProvider _artworkProvider;
+    private readonly IGameSuitabilityProvider _suitabilityProvider;
     private readonly IShellNavigator _navigator;
 
     // Full, unfiltered set so search can filter without re-scanning.
@@ -30,10 +31,12 @@ public sealed class GamesViewModel : PageViewModel
     public GamesViewModel(
         ISteamLibraryScanner scanner,
         IGameArtworkProvider artworkProvider,
+        IGameSuitabilityProvider suitabilityProvider,
         IShellNavigator navigator)
     {
         _scanner = scanner;
         _artworkProvider = artworkProvider;
+        _suitabilityProvider = suitabilityProvider;
         _navigator = navigator;
 
         SelectGameCommand = new RelayCommand<GameTileViewModel>(OnSelectGame);
@@ -108,6 +111,11 @@ public sealed class GamesViewModel : PageViewModel
             // Resolve artwork after the grid is populated so tiles appear instantly
             // and fill in their covers progressively.
             await LoadArtworkAsync();
+
+            // Then fill in the co-op suitability badges in the background (best-effort,
+            // may use the network). Fire-and-forget so the loading overlay clears as
+            // soon as the grid + covers are ready, and badges appear as they resolve.
+            _ = LoadSuitabilityAsync();
         }
         finally
         {
@@ -122,6 +130,15 @@ public sealed class GamesViewModel : PageViewModel
         {
             GameArtwork artwork = await _artworkProvider.ResolveAsync(tile.Game);
             tile.ApplyArtwork(artwork);
+        }
+    }
+
+    private async Task LoadSuitabilityAsync()
+    {
+        foreach (GameTileViewModel tile in _allTiles)
+        {
+            GameCoopInfo info = await _suitabilityProvider.GetAsync(tile.Game);
+            tile.ApplySuitability(info);
         }
     }
 

@@ -25,4 +25,20 @@ public interface ILaunchEngine
         LaunchRequest request,
         IProgress<LaunchProgress>? progress = null,
         CancellationToken cancellationToken = default);
+
+    /// <summary>True while a launched session is still running.</summary>
+    bool IsSessionActive { get; }
+
+    /// <summary>
+    /// Raised whenever <see cref="IsSessionActive"/> changes - because a session
+    /// started, was stopped, or ended because the games were closed. The UI uses
+    /// this to toggle its Start/Stop affordances.
+    /// </summary>
+    event EventHandler? SessionStateChanged;
+
+    /// <summary>
+    /// Stops the running session (closes/kills the launched games and tears down
+    /// isolation). Safe to call when nothing is running.
+    /// </summary>
+    Task StopAsync(CancellationToken cancellationToken = default);
 }

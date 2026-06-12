@@ -44,7 +44,19 @@ public sealed class XInputGamepadService : IGamepadService
         {
             return Enumerable.Range(0, XInputReader.MaxControllers)
                 .Where(i => _connected[i])
-                .Select(i => new GamepadInfo { UserIndex = i, IsConnected = true })
+                .Select(i =>
+                {
+                    (string deviceType, bool wireless, bool rumble) = XInputReader.GetCapabilities(i);
+                    return new GamepadInfo
+                    {
+                        UserIndex = i,
+                        IsConnected = true,
+                        DeviceType = deviceType,
+                        IsWireless = wireless,
+                        SupportsRumble = rumble,
+                        Battery = XInputReader.GetBattery(i)
+                    };
+                })
                 .ToList();
         }
     }

@@ -33,7 +33,10 @@ public sealed class GameDetailViewModel : PageViewModel
     private readonly IGamepadService _gamepadService;
     private readonly ISplitLayoutCalculator _layoutCalculator;
     private readonly ILaunchEngine _launchEngine;
+    private readonly IGameSuitabilityProvider _suitabilityProvider;
     private readonly IShellNavigator _navigator;
+
+    private GameCoopInfo _coop = GameCoopInfo.Unknown;
 
     private SteamGame _game = null!;
     private GameProfile _profile = null!;
@@ -49,6 +52,7 @@ public sealed class GameDetailViewModel : PageViewModel
     private bool _isolateControllers = true;
     private int _progress;
     private bool _isLaunching;
+    private bool _isSessionActive;
 
     public GameDetailViewModel(
         IGameProfileStore profileStore,
@@ -56,6 +60,7 @@ public sealed class GameDetailViewModel : PageViewModel
         IGamepadService gamepadService,
         ISplitLayoutCalculator layoutCalculator,
         ILaunchEngine launchEngine,
+        IGameSuitabilityProvider suitabilityProvider,
         IShellNavigator navigator)
     {
         _profileStore = profileStore;
@@ -63,6 +68,7 @@ public sealed class GameDetailViewModel : PageViewModel
         _gamepadService = gamepadService;
         _layoutCalculator = layoutCalculator;
         _launchEngine = launchEngine;
+        _suitabilityProvider = suitabilityProvider;
         _navigator = navigator;
 
         for (int i = 0; i < PlayerCount; i++)
@@ -76,8 +82,12 @@ public sealed class GameDetailViewModel : PageViewModel
         SetVerticalCommand = new RelayCommand(() => Orientation = SplitOrientation.Vertical);
         SetHorizontalCommand = new RelayCommand(() => Orientation = SplitOrientation.Horizontal);
         StartCommand = new AsyncRelayCommand(StartAsync, CanStart);
+        StopCommand = new AsyncRelayCommand(StopAsync, () => IsSessionActive);
         OpenLogsCommand = new RelayCommand(OpenLogs);
         RebuildInstancesCommand = new RelayCommand(RebuildInstances);
+
+        _isSessionActive = _launchEngine.IsSessionActive;
+        _launchEngine.SessionStateChanged += OnSessionStateChanged;
     }
 
     /// <summary>Opens this game's diagnostics folder (launch log, proxy logs, game log).</summary>
@@ -134,6 +144,15 @@ public sealed class GameDetailViewModel : PageViewModel
 
     public override string Title => _game?.Name ?? "Game";
 
+    /// <summary>Co-op suitability verdict for the banner accent colour.</summary>
+    public CoopSuitability Suitability => _coop.Suitability;
+
+    /// <summary>Banner headline, e.g. "Great fit for SplitRoast".</summary>
+    public string CoopHeadline => _coop.Headline;
+
+    /// <summary>Banner explanation sentence.</summary>
+    public string CoopDetail => _coop.Detail;
+
     public ObservableCollection<PlayerSlotViewModel> Players { get; } = new();
 
     public ObservableCollection<DisplayInfo> Displays { get; } = new();
@@ -145,6 +164,8 @@ public sealed class GameDetailViewModel : PageViewModel
     public RelayCommand SetHorizontalCommand { get; }
 
     public AsyncRelayCommand StartCommand { get; }
+
+    public AsyncRelayCommand StopCommand { get; }
 
     /// <summary>Background hero image for the detail header.</summary>
     public ImageSource? Hero
@@ -251,6 +272,21 @@ public sealed class GameDetailViewModel : PageViewModel
         private set => SetProperty(ref _isLaunching, value);
     }
 
+    /// <summary>True while a split-screen session this app launched is running.</summary>
+    public bool IsSessionActive
+    {
+        get => _isSessionActive;
+        private set
+        {
+            if (SetProperty(ref _isSessionActive, value))
+            {
+                StartCommand.RaiseCanExecuteChanged();
+                StopCommand.RaiseCanExecuteChanged();
+            }
+        }
+    }
+
+
     /// <summary>
     /// Loads the game's profile, populates displays and controllers, and restores
     /// the saved configuration. Call once after the view model is resolved.
@@ -279,6 +315,10 @@ public sealed class GameDetailViewModel : PageViewModel
 
             // The service is monitoring app-wide; we just listen for changes.
             _gamepadService.GamepadsChanged += OnGamepadsChanged;
+
+            // Fetch co-op suitability in the background so the page opens instantly
+            // and the banner fills in when the (cached/network) lookup completes.
+            _ = LoadSuitabilityAsync(game);
         }
         finally
         {
@@ -287,10 +327,19 @@ public sealed class GameDetailViewModel : PageViewModel
         }
     }
 
+    private async Task LoadSuitabilityAsync(SteamGame game)
+    {
+        _coop = await _suitabilityProvider.GetAsync(game);
+        OnPropertyChanged(nameof(Suitability));
+        OnPropertyChanged(nameof(CoopHeadline));
+        OnPropertyChanged(nameof(CoopDetail));
+    }
+
     /// <summary>Unsubscribes from controller updates when leaving the page.</summary>
     public void Cleanup()
     {
         _gamepadService.GamepadsChanged -= OnGamepadsChanged;
+        _launchEngine.SessionStateChanged -= OnSessionStateChanged;
     }
 
     private void LoadDisplays()
@@ -410,7 +459,7 @@ public sealed class GameDetailViewModel : PageViewModel
     /// <summary>Start is allowed only with two distinct controllers assigned.</summary>
     private bool CanStart()
     {
-        if (IsLaunching || SelectedDisplay is null)
+        if (IsLaunching || IsSessionActive || SelectedDisplay is null)
         {
             return false;
         }
@@ -466,7 +515,29 @@ public sealed class GameDetailViewModel : PageViewModel
         finally
         {
             IsLaunching = false;
+            IsSessionActive = _launchEngine.IsSessionActive;
             StartCommand.RaiseCanExecuteChanged();
         }
     }
+
+    private async Task StopAsync()
+    {
+        StatusText = "Stopping session...";
+        try
+        {
+            await _launchEngine.StopAsync();
+            StatusText = "Session stopped.";
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Stop failed: {ex.Message}";
+        }
+        finally
+        {
+            IsSessionActive = _launchEngine.IsSessionActive;
+        }
+    }
+
+    private void OnSessionStateChanged(object? sender, EventArgs e) =>
+        Application.Current?.Dispatcher.Invoke(() => IsSessionActive = _launchEngine.IsSessionActive);
 }
