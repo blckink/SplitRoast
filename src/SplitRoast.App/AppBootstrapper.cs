@@ -24,6 +24,7 @@ public static class AppBootstrapper
         // --- Feature services (one instance for the app lifetime) ---
         services.AddSingleton<ISteamLibraryScanner, SteamLibraryScanner>();
         services.AddSingleton<IGameArtworkProvider, SteamArtworkProvider>();
+        services.AddSingleton<IGameSuitabilityProvider, SteamStoreSuitabilityProvider>();
         services.AddSingleton<IGameProfileStore, JsonGameProfileStore>();
         services.AddSingleton<IDisplayService, DisplayService>();
         services.AddSingleton<ISplitLayoutCalculator, SplitLayoutCalculator>();

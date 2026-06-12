@@ -39,6 +39,71 @@ public static class XInputReader
     }
 
     /// <summary>
+    /// Reads device capabilities: a friendly sub-type name, whether the pad is
+    /// wireless, and whether it has rumble motors. Falls back to sensible defaults
+    /// (a wired gamepad with rumble) if the capability query is unavailable.
+    /// </summary>
+    public static (string DeviceType, bool IsWireless, bool SupportsRumble) GetCapabilities(int userIndex)
+    {
+        if (XInput.XInputGetCapabilities(userIndex, 0, out XInput.XINPUT_CAPABILITIES caps) != XInput.ErrorSuccess)
+        {
+            return ("Gamepad", false, true);
+        }
+
+        bool wireless = (caps.Flags & XInput.CapsWireless) != 0;
+        bool rumble = caps.Vibration.wLeftMotorSpeed != 0 || caps.Vibration.wRightMotorSpeed != 0;
+        return (SubTypeName(caps.SubType), wireless, rumble);
+    }
+
+    /// <summary>Reads the controller's battery level (best-effort).</summary>
+    public static GamepadBattery GetBattery(int userIndex)
+    {
+        if (XInput.XInputGetBatteryInformation(
+                userIndex, XInput.BatteryDevTypeGamepad, out XInput.XINPUT_BATTERY_INFORMATION info)
+            != XInput.ErrorSuccess)
+        {
+            return GamepadBattery.Unknown;
+        }
+
+        // BatteryType: 0 = disconnected, 1 = wired, 2 = alkaline, 3 = NiMH, 0xFF = unknown.
+        if (info.BatteryType == 0x00 || info.BatteryType == 0xFF)
+        {
+            return GamepadBattery.Unknown;
+        }
+
+        if (info.BatteryType == 0x01)
+        {
+            return GamepadBattery.Wired;
+        }
+
+        // BatteryLevel: 0 = empty, 1 = low, 2 = medium, 3 = full.
+        return info.BatteryLevel switch
+        {
+            0 => GamepadBattery.Empty,
+            1 => GamepadBattery.Low,
+            2 => GamepadBattery.Medium,
+            3 => GamepadBattery.Full,
+            _ => GamepadBattery.Unknown
+        };
+    }
+
+    /// <summary>Maps an XInput device sub-type byte to a friendly name.</summary>
+    private static string SubTypeName(byte subType) => subType switch
+    {
+        1 => "Gamepad",
+        2 => "Racing wheel",
+        3 => "Arcade stick",
+        4 => "Flight stick",
+        5 => "Dance pad",
+        6 => "Guitar",
+        7 => "Guitar (alternate)",
+        8 => "Drum kit",
+        11 => "Guitar (bass)",
+        19 => "Arcade pad",
+        _ => "Gamepad"
+    };
+
+    /// <summary>
     /// Sets the rumble motors (0.0-1.0 each). Out-of-range values are clamped.
     /// </summary>
     public static void SetVibration(int userIndex, double leftMotor, double rightMotor)

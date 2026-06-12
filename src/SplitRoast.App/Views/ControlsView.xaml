@@ -23,42 +23,85 @@
         <TextBlock Grid.Row="0" Text="Controls" Style="{StaticResource PageTitleStyle}"
                    Margin="0,0,0,16" />
 
-        <!-- Connected controllers -->
-        <ItemsControl Grid.Row="1" ItemsSource="{Binding Controllers}"
-                      VerticalAlignment="Top"
+        <!-- Connected controllers: responsive cards that reflow with the window -->
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled"
                       Visibility="{Binding IsEmpty, Converter={StaticResource InverseBoolToVis}}">
-            <ItemsControl.ItemTemplate>
-                <DataTemplate>
-                    <Border Background="{StaticResource SurfaceBrush}" CornerRadius="8"
-                            Padding="16,14" Margin="0,0,0,10" Width="420" HorizontalAlignment="Left">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <Border Grid.Column="0" Width="38" Height="38" CornerRadius="19"
-                                    Background="{StaticResource AccentBrush}">
-                                <TextBlock Text="&#x1F3AE;" FontSize="18" HorizontalAlignment="Center"
-                                           VerticalAlignment="Center" />
-                            </Border>
-                            <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
-                                <TextBlock Text="{Binding DisplayName}" FontSize="15" FontWeight="SemiBold"
-                                           Foreground="{StaticResource TextPrimaryBrush}" />
-                                <TextBlock Text="XInput - Connected" FontSize="12"
-                                           Foreground="{StaticResource TextSecondaryBrush}" />
+            <ItemsControl ItemsSource="{Binding Controllers}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <WrapPanel Orientation="Horizontal" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Background="{StaticResource SurfaceBrush}" CornerRadius="10"
+                                Padding="16" Margin="0,0,14,14" Width="360">
+                            <StackPanel>
+                                <!-- Header: icon, name + slot, rumble test -->
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Border Grid.Column="0" Width="40" Height="40" CornerRadius="20"
+                                            Background="{StaticResource AccentBrush}">
+                                        <TextBlock Text="&#x1F3AE;" FontSize="19" HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center" />
+                                    </Border>
+                                    <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding DisplayName}" FontSize="16" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource TextPrimaryBrush}" />
+                                        <TextBlock FontSize="12" Foreground="{StaticResource TextSecondaryBrush}">
+                                            <Run Text="{Binding SlotLabel, Mode=OneWay}" />
+                                            <Run Text="·  XInput · Connected" />
+                                        </TextBlock>
+                                    </StackPanel>
+                                    <Button Grid.Column="2" Content="Test (rumble)"
+                                            Style="{StaticResource SegmentButtonStyle}" Padding="14,8"
+                                            VerticalAlignment="Center"
+                                            IsEnabled="{Binding SupportsRumble}"
+                                            Command="{Binding DataContext.TestCommand,
+                                                      RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                            CommandParameter="{Binding}" />
+                                </Grid>
+
+                                <Border Height="1" Background="{StaticResource BorderBrush}" Margin="0,14,0,12" />
+
+                                <!-- Device details -->
+                                <UniformGrid Columns="2">
+                                    <StackPanel Margin="0,0,0,10">
+                                        <TextBlock Text="Type" FontSize="11"
+                                                   Foreground="{StaticResource TextSecondaryBrush}" />
+                                        <TextBlock Text="{Binding DeviceTypeDisplay}" FontSize="13.5"
+                                                   FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" />
+                                    </StackPanel>
+                                    <StackPanel Margin="0,0,0,10">
+                                        <TextBlock Text="Connection" FontSize="11"
+                                                   Foreground="{StaticResource TextSecondaryBrush}" />
+                                        <TextBlock Text="{Binding ConnectionDisplay}" FontSize="13.5"
+                                                   FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" />
+                                    </StackPanel>
+                                    <StackPanel Margin="0,0,0,2">
+                                        <TextBlock Text="Battery" FontSize="11"
+                                                   Foreground="{StaticResource TextSecondaryBrush}" />
+                                        <TextBlock Text="{Binding BatteryDisplay}" FontSize="13.5"
+                                                   FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" />
+                                    </StackPanel>
+                                    <StackPanel Margin="0,0,0,2">
+                                        <TextBlock Text="Rumble" FontSize="11"
+                                                   Foreground="{StaticResource TextSecondaryBrush}" />
+                                        <TextBlock Text="{Binding RumbleDisplay}" FontSize="13.5"
+                                                   FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" />
+                                    </StackPanel>
+                                </UniformGrid>
                             </StackPanel>
-                            <Button Grid.Column="2" Content="Test (rumble)"
-                                    Style="{StaticResource SegmentButtonStyle}" Padding="14,8"
-                                    VerticalAlignment="Center"
-                                    Command="{Binding DataContext.TestCommand,
-                                              RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                    CommandParameter="{Binding}" />
-                        </Grid>
-                    </Border>
-                </DataTemplate>
-            </ItemsControl.ItemTemplate>
-        </ItemsControl>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
 
         <!-- Empty state -->
         <StackPanel Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center"

@@ -12,6 +12,7 @@
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
         <conv:InverseBooleanToVisibilityConverter x:Key="InverseBoolToVis" />
+        <conv:SuitabilityToBrushConverter x:Key="SuitBrush" />
 
         <!--
             Tile button: a chrome-less button so the whole tile is clickable, with
@@ -72,9 +73,42 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- Page heading -->
-        <TextBlock Grid.Row="0" Text="My Games" Style="{StaticResource PageTitleStyle}"
-                   Margin="9,0,0,16" />
+        <!-- Page heading + suitability legend -->
+        <StackPanel Grid.Row="0" Margin="9,0,0,16">
+            <TextBlock Text="My Games" Style="{StaticResource PageTitleStyle}" />
+            <WrapPanel Margin="0,10,0,0">
+                <WrapPanel.Resources>
+                    <Style TargetType="TextBlock">
+                        <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}" />
+                        <Setter Property="FontSize" Value="11.5" />
+                        <Setter Property="VerticalAlignment" Value="Center" />
+                    </Style>
+                    <Style TargetType="Border" x:Key="Dot">
+                        <Setter Property="Width" Value="9" />
+                        <Setter Property="Height" Value="9" />
+                        <Setter Property="CornerRadius" Value="4.5" />
+                        <Setter Property="Margin" Value="0,0,5,0" />
+                        <Setter Property="VerticalAlignment" Value="Center" />
+                    </Style>
+                </WrapPanel.Resources>
+                <StackPanel Orientation="Horizontal" Margin="0,0,18,0">
+                    <Border Style="{StaticResource Dot}" Background="{StaticResource SuitGoodBrush}" />
+                    <TextBlock Text="Online co-op — ideal" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,18,0">
+                    <Border Style="{StaticResource Dot}" Background="{StaticResource SuitNativeBrush}" />
+                    <TextBlock Text="Native split-screen — not needed" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,18,0">
+                    <Border Style="{StaticResource Dot}" Background="{StaticResource SuitMaybeBrush}" />
+                    <TextBlock Text="Multiplayer — maybe" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,18,0">
+                    <Border Style="{StaticResource Dot}" Background="{StaticResource SuitBadBrush}" />
+                    <TextBlock Text="Single-player — won't work" />
+                </StackPanel>
+            </WrapPanel>
+        </StackPanel>
 
         <!-- Responsive tile grid. HorizontalScrollBarVisibility=Disabled forces the
              WrapPanel to wrap to the viewport width, so the number of tiles per row
@@ -110,6 +144,15 @@
                                                TextAlignment="Center" Margin="14"
                                                VerticalAlignment="Center" FontSize="15" FontWeight="SemiBold"
                                                Foreground="{StaticResource TextPrimaryBrush}" />
+                                </Border>
+
+                                <!-- Co-op suitability badge (top-left corner) -->
+                                <Border VerticalAlignment="Top" HorizontalAlignment="Left" Margin="6"
+                                        CornerRadius="4" Padding="7,3"
+                                        Background="{Binding Suitability, Converter={StaticResource SuitBrush}}"
+                                        Visibility="{Binding HasBadge, Converter={StaticResource BoolToVis}}">
+                                    <TextBlock Text="{Binding BadgeText}" FontSize="10.5"
+                                               FontWeight="SemiBold" Foreground="#FF10241D" />
                                 </Border>
                             </Grid>
                         </Button>

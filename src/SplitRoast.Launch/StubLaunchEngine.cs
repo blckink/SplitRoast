@@ -77,6 +77,13 @@ public sealed class StubLaunchEngine : ILaunchEngine
             $"{total} players. The real launch engine is not wired up yet.");
     }
 
+    // The stub never starts real processes, so there is never a live session.
+    public bool IsSessionActive => false;
+
+    public event EventHandler? SessionStateChanged;
+
+    public Task StopAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+
     // Stands in for the real per-step work; short delay keeps the UI progress
     // visible. Cancellable so the user can abort.
     private static Task SimulateStepAsync(CancellationToken cancellationToken) =>

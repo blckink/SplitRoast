@@ -30,6 +30,19 @@
     <SolidColorBrush x:Key="BorderBrush" Color="{StaticResource BorderColor}" />
     <SolidColorBrush x:Key="DangerBrush" Color="{StaticResource DangerColor}" />
 
+    <!-- Co-op suitability accents (shared by the grid badge and the detail banner) -->
+    <Color x:Key="SuitGoodColor">#FF4FD1A5</Color>
+    <Color x:Key="SuitNativeColor">#FF5B9BD5</Color>
+    <Color x:Key="SuitMaybeColor">#FFD9A036</Color>
+    <Color x:Key="SuitBadColor">#FF8A93A0</Color>
+    <Color x:Key="SuitUnknownColor">#FF55606C</Color>
+
+    <SolidColorBrush x:Key="SuitGoodBrush" Color="{StaticResource SuitGoodColor}" />
+    <SolidColorBrush x:Key="SuitNativeBrush" Color="{StaticResource SuitNativeColor}" />
+    <SolidColorBrush x:Key="SuitMaybeBrush" Color="{StaticResource SuitMaybeColor}" />
+    <SolidColorBrush x:Key="SuitBadBrush" Color="{StaticResource SuitBadColor}" />
+    <SolidColorBrush x:Key="SuitUnknownBrush" Color="{StaticResource SuitUnknownColor}" />
+
     <!-- ====================== Top-bar nav buttons ===================== -->
     <!--
         One shared style for the Games / Controls / Settings items. The active
