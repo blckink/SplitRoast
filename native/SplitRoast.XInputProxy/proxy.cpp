@@ -45,6 +45,9 @@ typedef DWORD(WINAPI* PFN_GetBattery)(DWORD, BYTE, XINPUT_BATTERY_INFORMATION*);
 typedef DWORD(WINAPI* PFN_GetKeystroke)(DWORD, DWORD, PXINPUT_KEYSTROKE);
 typedef DWORD(WINAPI* PFN_GetDSoundGuids)(DWORD, GUID*, GUID*);
 
+extern "C" DWORD WINAPI XInputGetState(DWORD dwUserIndex, XINPUT_STATE* pState);
+extern "C" DWORD WINAPI XInputGetStateEx(DWORD dwUserIndex, XINPUT_STATE* pState);
+
 static volatile LONG g_initState = 0;       // 0 = uninit, 1 = initializing, 2 = ready
 static DWORD         g_assignedIndex = 0;    // physical pad exposed as index 0
 static HMODULE       g_real = NULL;
@@ -68,6 +71,9 @@ static int     g_winX = 0, g_winY = 0, g_winW = 0, g_winH = 0;
 static bool    g_hasWindowTarget = false;
 static HWND    g_hookedWnd = NULL;
 static WNDPROC g_origProc = NULL;
+
+static void AssignRawDevice();
+static void InstallRawInputHooks();
 
 static DWORD WINAPI WindowEnforceThread(LPVOID);
 static void RefreshAssignedIndex();
@@ -111,32 +117,6 @@ static void ProxyLog(const char* msg)
         WriteFile(hf, line, (DWORD)len, &written, NULL);
     }
     CloseHandle(hf);
-}
-
-// Forward declarations of our exported XInput entry points, so EnsureInit can
-// inline-hook the genuine system functions to redirect into them.
-extern "C" DWORD WINAPI XInputGetState(DWORD dwUserIndex, XINPUT_STATE* pState);
-extern "C" DWORD WINAPI XInputGetStateEx(DWORD dwUserIndex, XINPUT_STATE* pState);
-
-// A game can load several of the xinput DLL names (e.g. Unity loads xinput1_4 and
-// the Steamworks SDK loads xinput9_1_0), so MULTIPLE copies of this proxy run in
-// one process. The drop-in XInput forwarding is fine per copy, but the global
-// inline hooks (MinHook on GetMessage/CreateFile/RoGetActivationFactory/the genuine
-// XInput etc.) must be installed by exactly ONE copy - two MinHook instances
-// patching the same function corrupt each other's trampolines and crash. This
-// claims a per-process named object; only the first copy becomes the installer.
-static int g_hookInstallerState = 0; // 0 = unknown, 1 = installer, 2 = not installer
-static bool AmIHookInstaller()
-{
-    if (g_hookInstallerState == 0)
-    {
-        char name[64];
-        sprintf_s(name, sizeof(name), "Local\\SplitRoast_InputHooks_%lu", GetCurrentProcessId());
-        HANDLE h = CreateMutexA(NULL, FALSE, name); // handle intentionally leaked so the name persists
-        bool first = (h != NULL && GetLastError() != ERROR_ALREADY_EXISTS);
-        g_hookInstallerState = first ? 1 : 2;
-    }
-    return g_hookInstallerState == 1;
 }
 
 // Lazily initialises the proxy on first use. We deliberately avoid doing this in
@@ -211,11 +191,17 @@ static void EnsureInit()
         p_GetDSoundGuids = (PFN_GetDSoundGuids)GetProcAddress(g_real, "XInputGetDSoundAudioDeviceGuids");
     }
 
-    // NOTE: we deliberately do NOT inline-hook the genuine system xinput1_4.dll.
-    // That shared system DLL is also used by Mono/Steamworks/Steam overlay, and
-    // hooking it caused access-violation crashes in ntdll/mono with games that load
-    // multiple xinput variants (Len's Island). Our drop-in proxy already handles the
-    // game's own XInput calls, so this extra hook is unnecessary.
+    // MinHook the genuine XInput module. Unity uses GetProcAddress("xinput1_4.dll", ...)
+    // internally. If it finds it and caches the real function pointers, it completely bypasses
+    // our proxy's exported functions. So we must inline hook them inside the loaded system dll.
+    MH_Initialize();
+    if (g_real != NULL)
+    {
+        void* pGet = (void*)GetProcAddress(g_real, "XInputGetState");
+        if (pGet) { MH_CreateHook(pGet, (void*)XInputGetState, (void**)&p_GetState); MH_EnableHook(pGet); }
+        void* pGetEx = (void*)GetProcAddress(g_real, (LPCSTR)MAKEINTRESOURCE(100));
+        if (pGetEx) { MH_CreateHook(pGetEx, (void*)XInputGetStateEx, (void**)&p_GetStateEx); MH_EnableHook(pGetEx); }
+    }
 
     char init[300];
     sprintf_s(init, sizeof(init),
@@ -223,6 +209,12 @@ static void EnsureInit()
               g_assignedIndex, g_padFile[0] ? g_padFile : "(none)",
               g_winW, g_winH, g_winX, g_winY, p_GetState ? "yes" : "NO");
     ProxyLog(init);
+
+    // Claim our gamepad, then install the inline Raw Input hooks so the game only
+    // ever sees this instance's controller (the WM_INPUT filter is a fallback).
+    // We do this immediately so games reading input early are caught.
+    AssignRawDevice();
+    InstallRawInputHooks();
 
     // If the launcher gave us a region, keep the game window inside it from
     // within the game process itself (clamps WM_WINDOWPOSCHANGING).
@@ -307,14 +299,6 @@ static UINT WINAPI My_GetRawInputBuffer(PRAWINPUT, PUINT, UINT);
 static bool ShouldSwallowRawInput(HRAWINPUT hRawInput);
 static bool IsGamepadDevice(HANDLE device);
 
-// Device-enumeration hook: hide the FOREIGN gamepad from GetRawInputDeviceList so
-// the game (Rewired) never even discovers it and so never creates a controller
-// for it. This is the strongest in-process isolation: the device simply does not
-// exist for this instance.
-typedef UINT (WINAPI* PFN_GetRawInputDeviceList)(PRAWINPUTDEVICELIST, PUINT, UINT);
-static PFN_GetRawInputDeviceList o_GetRawInputDeviceList = NULL;
-static UINT WINAPI My_GetRawInputDeviceList(PRAWINPUTDEVICELIST, PUINT, UINT);
-
 // Message-pump hooks: the reliable way (used by Nucleus/ProtoInput) to drop a
 // foreign gamepad is to blank its WM_INPUT message to WM_NULL before the game's
 // own message loop processes it. Rewired (which Roots of Pacha uses) reads raw
@@ -343,11 +327,10 @@ static HANDLE WINAPI My_CreateFileA(LPCSTR, DWORD, DWORD, LPSECURITY_ATTRIBUTES,
 static char g_foreignKeys[8][200];
 static int  g_foreignKeyCount = 0;
 
-// Windows Gaming Input (WGI) block: Rewired/Unity can read pads via WGI, which
-// bypasses XInput and Raw Input entirely. We hook combase!RoGetActivationFactory
-// and refuse any activation of a "Windows.Gaming.Input" class (REGDB_E_CLASSNOTREG),
-// so the game falls back to XInput/Raw Input - which we isolate. void* is used for
-// HSTRING/REFIID to avoid pulling in WinRT headers.
+// Windows Gaming Input (WGI) block: Rewired/Unity can use WGI which completely
+// bypasses XInput and Raw Input. We hook RoGetActivationFactory and block any
+// requests for classes under Windows.Gaming.Input by returning REGDB_E_CLASSNOTREG.
+// We use void* for HSTRING and REFIID to avoid including WinRT headers.
 typedef HRESULT (WINAPI* PFN_RoGetActivationFactory)(void*, void*, void**);
 typedef PCWSTR  (WINAPI* PFN_WindowsGetStringRawBuffer)(void*, UINT32*);
 static PFN_RoGetActivationFactory o_RoGetActivationFactory = NULL;
@@ -710,40 +693,6 @@ static UINT WINAPI My_GetRawInputBuffer(PRAWINPUT pData, PUINT pcbSize, UINT cbS
     return kept;
 }
 
-// Hides foreign gamepads from raw-input device enumeration so the game never
-// discovers them. Mouse, keyboard and our own pad stay visible.
-static UINT WINAPI My_GetRawInputDeviceList(PRAWINPUTDEVICELIST pList, PUINT puiNum, UINT cbSize)
-{
-    UINT r = o_GetRawInputDeviceList ? o_GetRawInputDeviceList(pList, puiNum, cbSize) : (UINT)-1;
-    if (!g_rawFilterReady || g_assignedRawDevice == NULL || pList == NULL || r == (UINT)-1)
-    {
-        return r;
-    }
-
-    UINT kept = 0;
-    for (UINT i = 0; i < r; ++i)
-    {
-        bool foreign = (pList[i].dwType == RIM_TYPEHID &&
-                        pList[i].hDevice != g_assignedRawDevice &&
-                        IsGamepadDevice(pList[i].hDevice));
-        if (!foreign)
-        {
-            if (kept != i) { pList[kept] = pList[i]; }
-            kept++;
-        }
-    }
-    if (kept != r)
-    {
-        if (puiNum != NULL) { *puiNum = kept; }
-        static volatile LONG logged = 0;
-        if (InterlockedCompareExchange(&logged, 1, 0) == 0)
-        {
-            ProxyLog("rawinput: hid a foreign gamepad from device enumeration");
-        }
-    }
-    return kept;
-}
-
 // Drops a foreign-gamepad WM_INPUT message by turning it into a harmless WM_NULL,
 // exactly like Nucleus/ProtoInput. Returns true if it blanked the message.
 static bool BlankIfForeignRawInput(LPMSG msg)
@@ -907,10 +856,14 @@ static HRESULT WINAPI My_RoGetActivationFactory(void* activatableClassId, void* 
     {
         UINT32 len = 0;
         PCWSTR str = p_WindowsGetStringRawBuffer(activatableClassId, &len);
-        if (str != NULL && len >= 20 && wcsncmp(str, L"Windows.Gaming.Input", 20) == 0)
+        if (str != NULL && len >= 20)
         {
-            LogWgiBlockOnce();
-            return (HRESULT)0x80040154; // REGDB_E_CLASSNOTREG
+            // Check if it starts with "Windows.Gaming.Input"
+            if (wcsncmp(str, L"Windows.Gaming.Input", 20) == 0)
+            {
+                LogWgiBlockOnce();
+                return 0x80040154; // REGDB_E_CLASSNOTREG
+            }
         }
     }
     return o_RoGetActivationFactory(activatableClassId, iid, factory);
@@ -923,23 +876,6 @@ static HRESULT WINAPI My_RoGetActivationFactory(void* activatableClassId, void* 
 // use to make a game respond to only one controller.
 static void InstallRawInputHooks()
 {
-    // Install exactly once, and only in the designated installer copy.
-    static volatile LONG once = 0;
-    if (!AmIHookInstaller() || InterlockedCompareExchange(&once, 1, 0) != 0)
-    {
-        return;
-    }
-
-    // Diagnostic master kill-switch: set SPLITROAST_DISABLE_INPUT_HOOKS=1 to skip ALL
-    // inline input hooks (keeping only the drop-in XInput reroute). Lets us confirm
-    // whether a crash comes from our hooks without a rebuild.
-    char dis[8] = { 0 };
-    if (GetEnvironmentVariableA("SPLITROAST_DISABLE_INPUT_HOOKS", dis, sizeof(dis)) > 0 && dis[0] == '1')
-    {
-        ProxyLog("rawinput: inline hooks DISABLED via SPLITROAST_DISABLE_INPUT_HOOKS");
-        return;
-    }
-
     MH_STATUS init = MH_Initialize();
     if (init != MH_OK && init != MH_ERROR_ALREADY_INITIALIZED)
     {
@@ -969,13 +905,6 @@ static void InstallRawInputHooks()
     {
         installed++;
     }
-    void* pDevList = (void*)GetProcAddress(user32, "GetRawInputDeviceList");
-    if (pDevList != NULL &&
-        MH_CreateHook(pDevList, (void*)My_GetRawInputDeviceList, (void**)&o_GetRawInputDeviceList) == MH_OK &&
-        MH_EnableHook(pDevList) == MH_OK)
-    {
-        installed++;
-    }
 
     // Message-pump hooks: blank foreign-gamepad WM_INPUT before the game reads it.
     int msgHooks = 0;
@@ -994,20 +923,29 @@ static void InstallRawInputHooks()
         }
     }
 
-    // Direct-HID block intentionally DISABLED: hooking kernel32!CreateFile (often a
-    // forwarder thunk on Windows 11) corrupted the trampoline and crashed games that
-    // call CreateFile heavily through Mono (Len's Island: mono-2.0-bdwgc.dll AV). It
-    // was a speculative "last channel" and is not needed for the games we target.
+    // Block direct HID opens of foreign gamepads (kernel32!CreateFile).
     int hidHooks = 0;
+    HMODULE k32 = GetModuleHandleA("kernel32.dll");
+    if (k32 != NULL)
+    {
+        void* pcw = (void*)GetProcAddress(k32, "CreateFileW");
+        void* pca = (void*)GetProcAddress(k32, "CreateFileA");
+        if (pcw != NULL && MH_CreateHook(pcw, (void*)My_CreateFileW, (void**)&o_CreateFileW) == MH_OK &&
+            MH_EnableHook(pcw) == MH_OK) { hidHooks++; }
+        if (pca != NULL && MH_CreateHook(pca, (void*)My_CreateFileA, (void**)&o_CreateFileA) == MH_OK &&
+            MH_EnableHook(pca) == MH_OK) { hidHooks++; }
+    }
 
     // Block Windows Gaming Input (combase!RoGetActivationFactory).
     int wgiHooks = 0;
     HMODULE combase = GetModuleHandleA("combase.dll");
-    if (combase == NULL) { combase = LoadLibraryA("combase.dll"); }
+    if (combase == NULL)
+    {
+        combase = LoadLibraryA("combase.dll");
+    }
     if (combase != NULL)
     {
-        p_WindowsGetStringRawBuffer =
-            (PFN_WindowsGetStringRawBuffer)GetProcAddress(combase, "WindowsGetStringRawBuffer");
+        p_WindowsGetStringRawBuffer = (PFN_WindowsGetStringRawBuffer)GetProcAddress(combase, "WindowsGetStringRawBuffer");
         void* pRoGet = (void*)GetProcAddress(combase, "RoGetActivationFactory");
         if (pRoGet != NULL && p_WindowsGetStringRawBuffer != NULL &&
             MH_CreateHook(pRoGet, (void*)My_RoGetActivationFactory, (void**)&o_RoGetActivationFactory) == MH_OK &&
@@ -1017,9 +955,8 @@ static void InstallRawInputHooks()
         }
     }
 
-    char msg[180];
-    sprintf_s(msg, sizeof(msg),
-              "rawinput: inline hooks installed (data %d/3, msgpump %d/4, hid %d/2, wgi %d/1)",
+    char msg[160];
+    sprintf_s(msg, sizeof(msg), "rawinput: inline hooks installed (data %d/2, msgpump %d/4, hid %d/2, wgi %d/1)",
               installed, msgHooks, hidHooks, wgiHooks);
     ProxyLog(msg);
 }
@@ -1028,15 +965,6 @@ static void InstallRawInputHooks()
 // claims the one at our assigned index for this instance.
 static void AssignRawDevice()
 {
-    // Run exactly once: a second pass would re-enumerate AFTER our enumeration hook
-    // is installed (which hides the foreign pad), leaving only one device and
-    // breaking the index assignment.
-    static volatile LONG once = 0;
-    if (InterlockedCompareExchange(&once, 1, 0) != 0)
-    {
-        return;
-    }
-
     UINT count = 0;
     if (GetRawInputDeviceList(NULL, &count, sizeof(RAWINPUTDEVICELIST)) == (UINT)-1 || count == 0)
     {
@@ -1117,42 +1045,6 @@ static void AssignRawDevice()
     {
         ProxyLog("rawinput: assigned index out of range, filter inactive");
     }
-}
-
-// Sets up controller isolation AS EARLY AS POSSIBLE (spawned from DllMain), so the
-// foreign gamepad is hidden and filtered before the game's input library (Rewired)
-// enumerates controllers. Reads the assigned index from the environment / live pad
-// file itself so it does not depend on the first XInput call.
-static volatile LONG g_earlySetupDone = 0;
-static DWORD WINAPI EarlyRawInputSetupThread(LPVOID)
-{
-    if (InterlockedCompareExchange(&g_earlySetupDone, 1, 0) != 0)
-    {
-        return 0;
-    }
-
-    // Only the single installer copy sets up the global inline hooks.
-    if (!AmIHookInstaller())
-    {
-        return 0;
-    }
-
-    char buffer[16] = { 0 };
-    DWORD len = GetEnvironmentVariableA("SPLITROAST_XINPUT_INDEX", buffer, sizeof(buffer));
-    if (len > 0 && len < sizeof(buffer))
-    {
-        int parsed = atoi(buffer);
-        if (parsed >= 0 && parsed <= 3) { g_assignedIndex = (DWORD)parsed; }
-    }
-    if (g_padFile[0] == 0)
-    {
-        GetEnvironmentVariableA("SPLITROAST_PAD_FILE", g_padFile, sizeof(g_padFile));
-    }
-    RefreshAssignedIndex();
-
-    AssignRawDevice();
-    InstallRawInputHooks();
-    return 0;
 }
 
 // ---- Window enforcement -------------------------------------------------
@@ -1263,15 +1155,6 @@ static DWORD WINAPI WindowEnforceThread(LPVOID)
     {
         ProxyLog("window enforce: no main window found");
         return 0;
-    }
-
-    // Controller isolation is set up early from DllMain (EarlyRawInputSetupThread);
-    // re-run here as a safety net in case the early pass ran before the game's
-    // modules were ready. Only the installer copy does it, and both are run-once.
-    if (AmIHookInstaller())
-    {
-        AssignRawDevice();
-        InstallRawInputHooks();
     }
 
     // Confine the game's idea of the monitor to our split region before it gets a
@@ -1420,15 +1303,20 @@ DWORD WINAPI XInputGetDSoundAudioDeviceGuids(DWORD dwUserIndex, GUID* pDSoundRen
 
 } // extern "C"
 
+static DWORD WINAPI InitThread(LPVOID)
+{
+    EnsureInit();
+    return 0;
+}
+
 BOOL APIENTRY DllMain(HMODULE, DWORD reason, LPVOID)
 {
     if (reason == DLL_PROCESS_ATTACH)
     {
-        // Set up controller isolation as early as possible, on a separate thread so
-        // we never touch the loader lock here. The thread runs after DllMain returns
-        // and before the game's input library enumerates controllers, so the foreign
-        // gamepad is hidden from the very start.
-        HANDLE th = CreateThread(NULL, 0, EarlyRawInputSetupThread, NULL, 0, NULL);
+        // Spawn a thread to initialize hooks immediately without blocking the
+        // loader lock. This ensures input is hooked before the game reads it
+        // even if it never calls XInputGetState.
+        HANDLE th = CreateThread(NULL, 0, InitThread, NULL, 0, NULL);
         if (th != NULL)
         {
             CloseHandle(th);
