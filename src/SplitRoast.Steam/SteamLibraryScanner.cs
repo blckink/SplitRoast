@@ -47,7 +47,7 @@ public sealed class SteamLibraryScanner : ISteamLibraryScanner
                 try
                 {
                     SteamGame? game = AppManifestParser.TryParse(manifest, library);
-                    if (game is not null)
+                    if (game is not null && !IsNonGameApp(game))
                     {
                         games.Add(game);
                     }
@@ -66,5 +66,32 @@ public sealed class SteamLibraryScanner : ISteamLibraryScanner
             .Select(g => g.First())
             .OrderBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase)
             .ToList();
+    }
+
+    // Steam installs non-game "tools" (redistributable bundles, Linux runtimes,
+    // Proton) as regular apps under steamapps. They carry no store artwork and can
+    // never be launched as a split-screen game, so they only show up as blank,
+    // unlaunchable tiles - filter them out by their well-known app ids and names.
+    private static readonly HashSet<uint> NonGameAppIds = new()
+    {
+        228980,   // Steamworks Common Redistributables
+        1070560,  // Steam Linux Runtime 1.0 (scout)
+        1391110,  // Steam Linux Runtime 2.0 (soldier)
+        1628350,  // Steam Linux Runtime 3.0 (sniper)
+        1493710,  // Proton Experimental
+    };
+
+    private static bool IsNonGameApp(SteamGame game)
+    {
+        if (NonGameAppIds.Contains(game.AppId))
+        {
+            return true;
+        }
+
+        string name = game.Name;
+        return name.StartsWith("Proton", StringComparison.OrdinalIgnoreCase)
+            || name.StartsWith("Steam Linux Runtime", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("Steamworks Common Redistributable", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("Steamworks SDK Redist", StringComparison.OrdinalIgnoreCase);
     }
 }

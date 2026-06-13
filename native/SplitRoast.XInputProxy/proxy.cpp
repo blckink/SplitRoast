@@ -337,6 +337,44 @@ static PFN_RoGetActivationFactory o_RoGetActivationFactory = NULL;
 static PFN_WindowsGetStringRawBuffer p_WindowsGetStringRawBuffer = NULL;
 static HRESULT WINAPI My_RoGetActivationFactory(void* activatableClassId, void* iid, void** factory);
 
+// ---- Background input + focus + cursor ---------------------------------
+// In a split session both game windows must run side by side, but the OS only
+// delivers raw gamepad input (WM_INPUT) to the FOREGROUND window unless the app
+// registered with RIDEV_INPUTSINK - so the background instance's controller goes
+// dead. Many engines (Unity's input backend in particular) also disable their
+// input devices when they believe they lost focus. We fix both the same way
+// Nucleus/ProtoInput do: force RIDEV_INPUTSINK on the game's gamepad raw-input
+// registration (delivered to the game's own window, so its normal read path still
+// works and our device filter still isolates one pad), and make focus checks
+// believe this instance is always the active/foreground app. We also neutralise
+// ClipCursor so one instance can't lock the system cursor to its window.
+
+typedef BOOL (WINAPI* PFN_RegisterRawInputDevices)(PCRAWINPUTDEVICE, UINT, UINT);
+static PFN_RegisterRawInputDevices o_RegisterRawInputDevices = NULL;
+static BOOL WINAPI My_RegisterRawInputDevices(PCRAWINPUTDEVICE, UINT, UINT);
+
+// Gamepad usages the game registered, remembered so we can re-register them with
+// background delivery once the main window is known (the game may register before
+// its window exists, when RIDEV_INPUTSINK is not yet usable).
+struct GamepadReg { USHORT usagePage; USHORT usage; DWORD flags; };
+static GamepadReg g_padRegs[8];
+static int        g_padRegCount = 0;
+static volatile LONG g_padReRegistered = 0;
+static void RememberPadReg(USHORT page, USHORT usage, DWORD flags);
+static void ReRegisterGamepadsForBackground();
+
+typedef HWND (WINAPI* PFN_GetHwndVoid)(void);
+static PFN_GetHwndVoid o_GetForegroundWindow = NULL;
+static PFN_GetHwndVoid o_GetActiveWindow = NULL;
+static PFN_GetHwndVoid o_GetFocus = NULL;
+static HWND WINAPI My_GetForegroundWindow(void);
+static HWND WINAPI My_GetActiveWindow(void);
+static HWND WINAPI My_GetFocus(void);
+
+typedef BOOL (WINAPI* PFN_ClipCursor)(const RECT*);
+static PFN_ClipCursor o_ClipCursor = NULL;
+static BOOL WINAPI My_ClipCursor(const RECT*);
+
 static int WINAPI My_GetSystemMetrics(int nIndex)
 {
     if (g_hasWindowTarget)
@@ -869,6 +907,148 @@ static HRESULT WINAPI My_RoGetActivationFactory(void* activatableClassId, void* 
     return o_RoGetActivationFactory(activatableClassId, iid, factory);
 }
 
+static inline bool IsGamepadUsage(USHORT page, USHORT usage)
+{
+    // Generic Desktop (1) / Joystick (4) or Gamepad (5).
+    return page == 0x01 && (usage == 0x04 || usage == 0x05);
+}
+
+static void RememberPadReg(USHORT page, USHORT usage, DWORD flags)
+{
+    for (int i = 0; i < g_padRegCount; ++i)
+    {
+        if (g_padRegs[i].usagePage == page && g_padRegs[i].usage == usage)
+        {
+            return;
+        }
+    }
+    if (g_padRegCount < 8)
+    {
+        g_padRegs[g_padRegCount].usagePage = page;
+        g_padRegs[g_padRegCount].usage = usage;
+        g_padRegs[g_padRegCount].flags = flags;
+        g_padRegCount++;
+    }
+}
+
+// Hooked RegisterRawInputDevices. For gamepad/joystick usages we force
+// RIDEV_INPUTSINK and a valid target window so the game keeps receiving its
+// controller while its window sits in the background. Mouse and keyboard
+// registrations are passed through untouched.
+static BOOL WINAPI My_RegisterRawInputDevices(PCRAWINPUTDEVICE pDevices, UINT count, UINT size)
+{
+    PFN_RegisterRawInputDevices real =
+        o_RegisterRawInputDevices ? o_RegisterRawInputDevices : RegisterRawInputDevices;
+
+    if (!g_hasWindowTarget || pDevices == NULL || count == 0 || count > 16 ||
+        size != sizeof(RAWINPUTDEVICE))
+    {
+        return real(pDevices, count, size);
+    }
+
+    RAWINPUTDEVICE local[16];
+    bool patched = false;
+    for (UINT i = 0; i < count; ++i)
+    {
+        local[i] = pDevices[i];
+        if (IsGamepadUsage(local[i].usUsagePage, local[i].usUsage) &&
+            !(local[i].dwFlags & RIDEV_REMOVE))
+        {
+            RememberPadReg(local[i].usUsagePage, local[i].usUsage, local[i].dwFlags);
+            HWND target = local[i].hwndTarget ? local[i].hwndTarget : g_hookedWnd;
+            if (target != NULL)
+            {
+                local[i].dwFlags |= RIDEV_INPUTSINK;
+                local[i].hwndTarget = target;
+                patched = true;
+            }
+        }
+    }
+
+    if (patched)
+    {
+        static volatile LONG logged = 0;
+        if (InterlockedCompareExchange(&logged, 1, 0) == 0)
+        {
+            ProxyLog("rawinput: forced RIDEV_INPUTSINK so the gamepad keeps working in the background");
+        }
+    }
+
+    return real(local, count, size);
+}
+
+// Once the main window exists, (re)register the gamepad usages the game asked for
+// with background delivery on that window. Replaces the game's own registration
+// (Windows keeps only one per usage), so WM_INPUT arrives even in the background.
+static void ReRegisterGamepadsForBackground()
+{
+    if (g_hookedWnd == NULL || g_padRegCount == 0)
+    {
+        return;
+    }
+    if (InterlockedCompareExchange(&g_padReRegistered, 1, 0) != 0)
+    {
+        return; // already done
+    }
+
+    PFN_RegisterRawInputDevices real =
+        o_RegisterRawInputDevices ? o_RegisterRawInputDevices : RegisterRawInputDevices;
+
+    RAWINPUTDEVICE devs[8];
+    int n = 0;
+    for (int i = 0; i < g_padRegCount && n < 8; ++i)
+    {
+        devs[n].usUsagePage = g_padRegs[i].usagePage;
+        devs[n].usUsage = g_padRegs[i].usage;
+        devs[n].dwFlags = (g_padRegs[i].flags & ~(DWORD)RIDEV_REMOVE) | RIDEV_INPUTSINK;
+        devs[n].hwndTarget = g_hookedWnd;
+        n++;
+    }
+    if (n > 0 && real(devs, (UINT)n, sizeof(RAWINPUTDEVICE)))
+    {
+        ProxyLog("rawinput: re-registered gamepad(s) with background delivery on the main window");
+    }
+}
+
+// Focus spoof: report this instance's own window as the foreground/active/focused
+// one so engines that gate input on focus keep their devices live while in the
+// background. Falls back to the real value before the window is known.
+static HWND WINAPI My_GetForegroundWindow(void)
+{
+    if (g_hasWindowTarget && g_hookedWnd != NULL) { return g_hookedWnd; }
+    return o_GetForegroundWindow ? o_GetForegroundWindow() : NULL;
+}
+
+static HWND WINAPI My_GetActiveWindow(void)
+{
+    if (g_hasWindowTarget && g_hookedWnd != NULL) { return g_hookedWnd; }
+    return o_GetActiveWindow ? o_GetActiveWindow() : NULL;
+}
+
+static HWND WINAPI My_GetFocus(void)
+{
+    if (g_hasWindowTarget && g_hookedWnd != NULL) { return g_hookedWnd; }
+    return o_GetFocus ? o_GetFocus() : NULL;
+}
+
+// Neutralise cursor clipping: never let one split instance confine the system
+// cursor to its window, so the player can move the mouse between both windows and
+// back to the desktop.
+static BOOL WINAPI My_ClipCursor(const RECT* rect)
+{
+    PFN_ClipCursor real = o_ClipCursor ? o_ClipCursor : ClipCursor;
+    if (g_hasWindowTarget && rect != NULL)
+    {
+        static volatile LONG logged = 0;
+        if (InterlockedCompareExchange(&logged, 1, 0) == 0)
+        {
+            ProxyLog("cursor: neutralised ClipCursor so the mouse is not locked to one window");
+        }
+        return real(NULL); // release any confinement
+    }
+    return real(rect);
+}
+
 // Installs INLINE hooks (via MinHook) on the Raw Input read functions inside
 // user32 itself. Unlike IAT patching, this catches every caller regardless of how
 // it resolved the function - which is required for Unity, whose engine does not go
@@ -955,9 +1135,29 @@ static void InstallRawInputHooks()
         }
     }
 
-    char msg[160];
-    sprintf_s(msg, sizeof(msg), "rawinput: inline hooks installed (data %d/2, msgpump %d/4, hid %d/2, wgi %d/1)",
-              installed, msgHooks, hidHooks, wgiHooks);
+    // Background delivery + focus spoof + cursor freedom (all in user32). Only
+    // meaningful for a split instance (g_hasWindowTarget); harmless otherwise.
+    int bgHooks = 0;
+    struct { const char* name; void* detour; void** orig; } bg[] = {
+        { "RegisterRawInputDevices", (void*)My_RegisterRawInputDevices, (void**)&o_RegisterRawInputDevices },
+        { "GetForegroundWindow",     (void*)My_GetForegroundWindow,     (void**)&o_GetForegroundWindow },
+        { "GetActiveWindow",         (void*)My_GetActiveWindow,         (void**)&o_GetActiveWindow },
+        { "GetFocus",                (void*)My_GetFocus,                (void**)&o_GetFocus },
+        { "ClipCursor",              (void*)My_ClipCursor,              (void**)&o_ClipCursor },
+    };
+    for (int i = 0; i < 5; ++i)
+    {
+        void* p = (void*)GetProcAddress(user32, bg[i].name);
+        if (p != NULL && MH_CreateHook(p, bg[i].detour, bg[i].orig) == MH_OK && MH_EnableHook(p) == MH_OK)
+        {
+            bgHooks++;
+        }
+    }
+
+    char msg[200];
+    sprintf_s(msg, sizeof(msg),
+              "rawinput: inline hooks installed (data %d/2, msgpump %d/4, hid %d/2, wgi %d/1, bg %d/5)",
+              installed, msgHooks, hidHooks, wgiHooks, bgHooks);
     ProxyLog(msg);
 }
 
@@ -1172,6 +1372,10 @@ static DWORD WINAPI WindowEnforceThread(LPVOID)
     SetWindowPos(wnd, NULL, g_winX, g_winY, g_winW, g_winH,
                  SWP_NOZORDER | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
     ProxyLog("window enforce: hooked main window + pinned to region");
+
+    // Now that we have the window, ensure the game's gamepad raw input is
+    // delivered even when this window is in the background.
+    ReRegisterGamepadsForBackground();
     return 0;
 }
 

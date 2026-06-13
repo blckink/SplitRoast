@@ -26,6 +26,13 @@ public sealed class CoopRecipe
     /// <summary>Path of steam_api.dll relative to the install dir, or null.</summary>
     public string? SteamApi32RelPath { get; init; }
 
+    /// <summary>
+    /// True if the executable is wrapped with Steam DRM (the SteamStub). These
+    /// games need the Steam client running before launch, otherwise the stub
+    /// relaunches them through Steam and the copy we started exits.
+    /// </summary>
+    public bool HasSteamDrm { get; init; }
+
     /// <summary>True if the game ships a Steam API DLL (i.e. it is a Steam game).</summary>
     public bool UsesSteam => SteamApi64RelPath is not null || SteamApi32RelPath is not null;
 
