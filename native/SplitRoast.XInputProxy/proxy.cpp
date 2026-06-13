@@ -119,6 +119,38 @@ static void ProxyLog(const char* msg)
     CloseHandle(hf);
 }
 
+// Diagnostic: log which physical XInput slots are actually connected (as the real
+// XInput sees them, before our index mapping). This is how we tell whether the
+// second instance's assigned slot is genuinely empty - e.g. because Steam Input
+// merged both pads into one virtual controller on slot 0, or because a pad isn't
+// in XInput mode - which no proxy mapping can conjure a controller out of.
+static void LogXInputScan()
+{
+    if (p_GetState == NULL)
+    {
+        ProxyLog("xinput scan: real XInput unavailable");
+        return;
+    }
+
+    char detail[160] = { 0 };
+    int connected = 0;
+    for (DWORD i = 0; i < 4; ++i)
+    {
+        XINPUT_STATE st;
+        memset(&st, 0, sizeof(st));
+        bool ok = (p_GetState(i, &st) == ERROR_SUCCESS);
+        char one[40];
+        sprintf_s(one, sizeof(one), " slot%lu=%s", i, ok ? "connected" : "empty");
+        strcat_s(detail, sizeof(detail), one);
+        if (ok) { connected++; }
+    }
+
+    char m[220];
+    sprintf_s(m, sizeof(m), "xinput scan:%s (this instance forwards slot %lu, total connected=%d)",
+              detail, g_assignedIndex, connected);
+    ProxyLog(m);
+}
+
 // Lazily initialises the proxy on first use. We deliberately avoid doing this in
 // DllMain to stay clear of loader-lock restrictions on LoadLibrary.
 static void EnsureInit()
@@ -209,6 +241,7 @@ static void EnsureInit()
               g_assignedIndex, g_padFile[0] ? g_padFile : "(none)",
               g_winW, g_winH, g_winX, g_winY, p_GetState ? "yes" : "NO");
     ProxyLog(init);
+    LogXInputScan();
 
     // Claim our gamepad, then install the inline Raw Input hooks so the game only
     // ever sees this instance's controller (the WM_INPUT filter is a fallback).
@@ -1394,14 +1427,16 @@ extern "C" {
 
 // Logs the first time the game reads any XInput state, so we can tell whether the
 // game uses XInput at all (if this never appears, it reads pads via another API).
-static void LogFirstXInputCall(DWORD requestedIndex)
+static void LogFirstXInputCall(DWORD requestedIndex, DWORD realIndex, DWORD result)
 {
     static volatile LONG logged = 0;
     if (InterlockedCompareExchange(&logged, 1, 0) == 0)
     {
-        char msg[160];
+        char msg[200];
         sprintf_s(msg, sizeof(msg),
-                  "game called XInputGetState (requested index %lu) -> using XInput", requestedIndex);
+                  "game called XInputGetState (requested %lu) -> real slot %lu = %s",
+                  requestedIndex, realIndex,
+                  result == ERROR_SUCCESS ? "connected" : "NOT connected");
         ProxyLog(msg);
     }
 }
@@ -1409,21 +1444,21 @@ static void LogFirstXInputCall(DWORD requestedIndex)
 DWORD WINAPI XInputGetState(DWORD dwUserIndex, XINPUT_STATE* pState)
 {
     EnsureInit();
-    LogFirstXInputCall(dwUserIndex);
     RefreshAssignedIndex();
     DWORD real;
     if (!MapIndex(dwUserIndex, real) || p_GetState == NULL)
     {
         return ERROR_DEVICE_NOT_CONNECTED;
     }
-    return p_GetState(real, pState);
+    DWORD r = p_GetState(real, pState);
+    LogFirstXInputCall(dwUserIndex, real, r);
+    return r;
 }
 
 // Hidden ordinal-100 variant. Falls back to the normal call if unavailable.
 DWORD WINAPI XInputGetStateEx(DWORD dwUserIndex, XINPUT_STATE* pState)
 {
     EnsureInit();
-    LogFirstXInputCall(dwUserIndex);
     RefreshAssignedIndex();
     DWORD real;
     if (!MapIndex(dwUserIndex, real))
@@ -1432,11 +1467,15 @@ DWORD WINAPI XInputGetStateEx(DWORD dwUserIndex, XINPUT_STATE* pState)
     }
     if (p_GetStateEx != NULL)
     {
-        return p_GetStateEx(real, pState);
+        DWORD r = p_GetStateEx(real, pState);
+        LogFirstXInputCall(dwUserIndex, real, r);
+        return r;
     }
     if (p_GetState != NULL)
     {
-        return p_GetState(real, pState);
+        DWORD r = p_GetState(real, pState);
+        LogFirstXInputCall(dwUserIndex, real, r);
+        return r;
     }
     return ERROR_DEVICE_NOT_CONNECTED;
 }
