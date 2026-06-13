@@ -60,7 +60,7 @@
                                    Foreground="{StaticResource TextPrimaryBrush}" />
                     </StackPanel>
 
-                    <!-- Search (only on the games grid) -->
+                    <!-- Search (only on the installed-library grid) -->
                     <Border Grid.Column="1" Width="240" Height="30" CornerRadius="6"
                             Margin="14,0" VerticalAlignment="Center"
                             Background="{StaticResource SurfaceBrush}"
@@ -68,7 +68,7 @@
                             WindowChrome.IsHitTestVisibleInChrome="True"
                             Visibility="{Binding IsSearchVisible, Converter={StaticResource BoolToVis}}">
                         <Grid>
-                            <TextBlock Text="Search games" Margin="10,0,0,0"
+                            <TextBlock Text="Search library" Margin="10,0,0,0"
                                        VerticalAlignment="Center" IsHitTestVisible="False"
                                        Foreground="{StaticResource TextSecondaryBrush}">
                                 <TextBlock.Style>
@@ -93,9 +93,12 @@
                     <!-- Center navigation -->
                     <StackPanel Grid.Column="2" Orientation="Horizontal"
                                 HorizontalAlignment="Center" VerticalAlignment="Stretch">
-                        <Button Content="Games" Style="{StaticResource NavButtonStyle}"
+                        <Button Content="Library" Style="{StaticResource NavButtonStyle}"
                                 Command="{Binding ShowGamesCommand}"
                                 Tag="{Binding IsGamesActive}" />
+                        <Button Content="Discover" Style="{StaticResource NavButtonStyle}"
+                                Command="{Binding ShowDiscoverCommand}"
+                                Tag="{Binding IsDiscoverActive}" />
                         <Button Content="Controls" Style="{StaticResource NavButtonStyle}"
                                 Command="{Binding ShowControlsCommand}"
                                 Tag="{Binding IsControlsActive}" />

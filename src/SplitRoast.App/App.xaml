@@ -20,6 +20,9 @@
             <DataTemplate DataType="{x:Type vm:GamesViewModel}">
                 <views:GamesView />
             </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:DiscoverViewModel}">
+                <views:DiscoverView />
+            </DataTemplate>
             <DataTemplate DataType="{x:Type vm:GameDetailViewModel}">
                 <views:GameDetailView />
             </DataTemplate>

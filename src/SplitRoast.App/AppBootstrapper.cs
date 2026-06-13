@@ -25,6 +25,7 @@ public static class AppBootstrapper
         services.AddSingleton<ISteamLibraryScanner, SteamLibraryScanner>();
         services.AddSingleton<IGameArtworkProvider, SteamArtworkProvider>();
         services.AddSingleton<IGameSuitabilityProvider, SteamStoreSuitabilityProvider>();
+        services.AddSingleton<IStoreDiscoveryProvider, SteamStoreSearchProvider>();
         services.AddSingleton<IGameProfileStore, JsonGameProfileStore>();
         services.AddSingleton<IDisplayService, DisplayService>();
         services.AddSingleton<ISplitLayoutCalculator, SplitLayoutCalculator>();
@@ -47,6 +48,7 @@ public static class AppBootstrapper
         // Persistent pages are singletons; the detail page is transient so each
         // game gets a clean view model.
         services.AddSingleton<GamesViewModel>();
+        services.AddSingleton<DiscoverViewModel>();
         services.AddSingleton<ControlsViewModel>();
         services.AddSingleton<SettingsViewModel>();
         services.AddTransient<GameDetailViewModel>();
