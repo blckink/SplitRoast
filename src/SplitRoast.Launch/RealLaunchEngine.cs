@@ -160,7 +160,20 @@ public sealed class RealLaunchEngine : ILaunchEngine
         bool emulatorReady = wantsEmulator && GoldbergLocator.CanServe(recipe!);
 
         diag.Log($"Analysis: exe='{exePath ?? "(none)"}', arch={arch}, engine={recipe?.Engine.ToString() ?? "n/a"}, " +
-                 $"usesSteam={recipe?.UsesSteam == true}, wantsEmulator={wantsEmulator}, emulatorReady={emulatorReady}.");
+                 $"usesSteam={recipe?.UsesSteam == true}, steamDrm={recipe?.HasSteamDrm == true}, " +
+                 $"wantsEmulator={wantsEmulator}, emulatorReady={emulatorReady}.");
+
+        // Steam-DRM (SteamStub) games relaunch themselves through Steam when the
+        // client isn't running - the copy we start exits and a stray fullscreen
+        // window appears instead of the split. Start Steam first so our mirrored
+        // instances launch cleanly. Plain Steam games (e.g. Roots of Pacha) have no
+        // stub, so this is skipped and their behaviour is unchanged.
+        if (!testMode && recipe?.HasSteamDrm == true)
+        {
+            progress?.Report(new LaunchProgress(8, "Starting Steam (required by this game)..."));
+            bool steamOk = SteamClientController.EnsureRunning(diag.Log, cancellationToken);
+            diag.Log($"Steam DRM detected; ensured Steam client running={steamOk}.");
+        }
 
         // Direct mode (no mirroring): install the proxy into the original folder once.
         bool directIsolated = false;

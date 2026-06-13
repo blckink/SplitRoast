@@ -15,6 +15,7 @@ public static class GameAnalyzer
     {
         EngineType engine = DetectEngine(installDir);
         (string? api64, string? api32) = FindSteamApi(installDir);
+        bool hasSteamDrm = SteamStubDetector.IsSteamDrmProtected(exePath);
 
         return new CoopRecipe
         {
@@ -23,7 +24,8 @@ public static class GameAnalyzer
             SourceExePath = exePath,
             Engine = engine,
             SteamApi64RelPath = api64,
-            SteamApi32RelPath = api32
+            SteamApi32RelPath = api32,
+            HasSteamDrm = hasSteamDrm
         };
     }
 
