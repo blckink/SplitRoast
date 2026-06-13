@@ -151,6 +151,10 @@ static void LogXInputScan()
     ProxyLog(m);
 }
 
+// Defined later (needs the module-presence helpers); forward-declared so EnsureInit
+// can report whether the Steam overlay is already in the process.
+static void LogOverlayState(const char* when);
+
 // Lazily initialises the proxy on first use. We deliberately avoid doing this in
 // DllMain to stay clear of loader-lock restrictions on LoadLibrary.
 static void EnsureInit()
@@ -242,6 +246,7 @@ static void EnsureInit()
               g_winW, g_winH, g_winX, g_winY, p_GetState ? "yes" : "NO");
     ProxyLog(init);
     LogXInputScan();
+    LogOverlayState("at init");
 
     // Claim our gamepad, then install the inline Raw Input hooks so the game only
     // ever sees this instance's controller (the WM_INPUT filter is a fallback).
@@ -407,6 +412,29 @@ static HWND WINAPI My_GetFocus(void);
 typedef BOOL (WINAPI* PFN_ClipCursor)(const RECT*);
 static PFN_ClipCursor o_ClipCursor = NULL;
 static BOOL WINAPI My_ClipCursor(const RECT*);
+
+// ---- Steam overlay block ------------------------------------------------
+// When the Steam client is running (we start it for Steam-DRM games), Steam
+// injects GameOverlayRenderer into the game and hooks XInput THROUGH Steam Input,
+// which reorganises/merges the physical pads - so the second instance's assigned
+// XInput slot reads "not connected" and that player goes dead. This happens even
+// with the overlay and Steam Input disabled in settings (Steam re-injects), which
+// is exactly why toggling Steam Input changes nothing. Because we launch the game
+// ourselves - before Steam adopts it - we can refuse to load the overlay DLL, so
+// it never gets to hook XInput and the game keeps seeing the real controllers.
+typedef HMODULE (WINAPI* PFN_LoadLibraryW)(LPCWSTR);
+typedef HMODULE (WINAPI* PFN_LoadLibraryA)(LPCSTR);
+typedef HMODULE (WINAPI* PFN_LoadLibraryExW)(LPCWSTR, HANDLE, DWORD);
+typedef HMODULE (WINAPI* PFN_LoadLibraryExA)(LPCSTR, HANDLE, DWORD);
+static PFN_LoadLibraryW   o_LoadLibraryW = NULL;
+static PFN_LoadLibraryA   o_LoadLibraryA = NULL;
+static PFN_LoadLibraryExW o_LoadLibraryExW = NULL;
+static PFN_LoadLibraryExA o_LoadLibraryExA = NULL;
+static HMODULE WINAPI My_LoadLibraryW(LPCWSTR);
+static HMODULE WINAPI My_LoadLibraryA(LPCSTR);
+static HMODULE WINAPI My_LoadLibraryExW(LPCWSTR, HANDLE, DWORD);
+static HMODULE WINAPI My_LoadLibraryExA(LPCSTR, HANDLE, DWORD);
+static void LogOverlayState(const char* when);
 
 static int WINAPI My_GetSystemMetrics(int nIndex)
 {
@@ -1082,6 +1110,103 @@ static BOOL WINAPI My_ClipCursor(const RECT* rect)
     return real(rect);
 }
 
+// True if a (wide) module name/path refers to Steam's overlay renderer.
+static bool IsOverlayNameW(LPCWSTR name)
+{
+    if (name == NULL) { return false; }
+    char buf[MAX_PATH];
+    int j = 0;
+    for (int i = 0; name[i] != 0 && j < (int)sizeof(buf) - 1; ++i)
+    {
+        wchar_t w = name[i];
+        char c = (w < 128) ? (char)w : '?';
+        if (c >= 'A' && c <= 'Z') { c = (char)(c - 'A' + 'a'); }
+        buf[j++] = c;
+    }
+    buf[j] = 0;
+    return strstr(buf, "gameoverlayrenderer") != NULL;
+}
+
+static bool IsOverlayNameA(LPCSTR name)
+{
+    if (name == NULL) { return false; }
+    char buf[MAX_PATH];
+    int j = 0;
+    for (int i = 0; name[i] != 0 && j < (int)sizeof(buf) - 1; ++i)
+    {
+        char c = name[i];
+        if (c >= 'A' && c <= 'Z') { c = (char)(c - 'A' + 'a'); }
+        buf[j++] = c;
+    }
+    buf[j] = 0;
+    return strstr(buf, "gameoverlayrenderer") != NULL;
+}
+
+static void LogOverlayBlockOnce()
+{
+    static volatile LONG logged = 0;
+    if (InterlockedCompareExchange(&logged, 1, 0) == 0)
+    {
+        ProxyLog("overlay: blocked Steam GameOverlayRenderer from loading (stops it hijacking XInput)");
+    }
+}
+
+static HMODULE WINAPI My_LoadLibraryW(LPCWSTR name)
+{
+    if (g_hasWindowTarget && IsOverlayNameW(name))
+    {
+        LogOverlayBlockOnce();
+        SetLastError(ERROR_MOD_NOT_FOUND);
+        return NULL;
+    }
+    return o_LoadLibraryW ? o_LoadLibraryW(name) : LoadLibraryW(name);
+}
+
+static HMODULE WINAPI My_LoadLibraryA(LPCSTR name)
+{
+    if (g_hasWindowTarget && IsOverlayNameA(name))
+    {
+        LogOverlayBlockOnce();
+        SetLastError(ERROR_MOD_NOT_FOUND);
+        return NULL;
+    }
+    return o_LoadLibraryA ? o_LoadLibraryA(name) : LoadLibraryA(name);
+}
+
+static HMODULE WINAPI My_LoadLibraryExW(LPCWSTR name, HANDLE file, DWORD flags)
+{
+    if (g_hasWindowTarget && IsOverlayNameW(name))
+    {
+        LogOverlayBlockOnce();
+        SetLastError(ERROR_MOD_NOT_FOUND);
+        return NULL;
+    }
+    return o_LoadLibraryExW ? o_LoadLibraryExW(name, file, flags) : LoadLibraryExW(name, file, flags);
+}
+
+static HMODULE WINAPI My_LoadLibraryExA(LPCSTR name, HANDLE file, DWORD flags)
+{
+    if (g_hasWindowTarget && IsOverlayNameA(name))
+    {
+        LogOverlayBlockOnce();
+        SetLastError(ERROR_MOD_NOT_FOUND);
+        return NULL;
+    }
+    return o_LoadLibraryExA ? o_LoadLibraryExA(name, file, flags) : LoadLibraryExA(name, file, flags);
+}
+
+// Logs whether the Steam overlay is present in this process (it hooks XInput, so
+// knowing it is here explains a "second controller missing" symptom).
+static void LogOverlayState(const char* when)
+{
+    bool present = GetModuleHandleA("GameOverlayRenderer64.dll") != NULL ||
+                   GetModuleHandleA("GameOverlayRenderer.dll") != NULL;
+    char m[120];
+    sprintf_s(m, sizeof(m), "overlay: Steam GameOverlayRenderer %s (%s)",
+              present ? "PRESENT" : "not loaded", when);
+    ProxyLog(m);
+}
+
 // Installs INLINE hooks (via MinHook) on the Raw Input read functions inside
 // user32 itself. Unlike IAT patching, this catches every caller regardless of how
 // it resolved the function - which is required for Unity, whose engine does not go
@@ -1149,6 +1274,27 @@ static void InstallRawInputHooks()
             MH_EnableHook(pca) == MH_OK) { hidHooks++; }
     }
 
+    // Block the Steam overlay (kernel32!LoadLibrary*) from loading, so it can't
+    // inject its XInput hook and let Steam Input swallow the second controller.
+    int overlayHooks = 0;
+    if (k32 != NULL)
+    {
+        struct { const char* name; void* detour; void** orig; } ll[] = {
+            { "LoadLibraryW",   (void*)My_LoadLibraryW,   (void**)&o_LoadLibraryW },
+            { "LoadLibraryA",   (void*)My_LoadLibraryA,   (void**)&o_LoadLibraryA },
+            { "LoadLibraryExW", (void*)My_LoadLibraryExW, (void**)&o_LoadLibraryExW },
+            { "LoadLibraryExA", (void*)My_LoadLibraryExA, (void**)&o_LoadLibraryExA },
+        };
+        for (int i = 0; i < 4; ++i)
+        {
+            void* p = (void*)GetProcAddress(k32, ll[i].name);
+            if (p != NULL && MH_CreateHook(p, ll[i].detour, ll[i].orig) == MH_OK && MH_EnableHook(p) == MH_OK)
+            {
+                overlayHooks++;
+            }
+        }
+    }
+
     // Block Windows Gaming Input (combase!RoGetActivationFactory).
     int wgiHooks = 0;
     HMODULE combase = GetModuleHandleA("combase.dll");
@@ -1187,10 +1333,10 @@ static void InstallRawInputHooks()
         }
     }
 
-    char msg[200];
+    char msg[220];
     sprintf_s(msg, sizeof(msg),
-              "rawinput: inline hooks installed (data %d/2, msgpump %d/4, hid %d/2, wgi %d/1, bg %d/5)",
-              installed, msgHooks, hidHooks, wgiHooks, bgHooks);
+              "rawinput: inline hooks installed (data %d/2, msgpump %d/4, hid %d/2, wgi %d/1, bg %d/5, overlayblock %d/4)",
+              installed, msgHooks, hidHooks, wgiHooks, bgHooks, overlayHooks);
     ProxyLog(msg);
 }
 
@@ -1409,6 +1555,12 @@ static DWORD WINAPI WindowEnforceThread(LPVOID)
     // Now that we have the window, ensure the game's gamepad raw input is
     // delivered even when this window is in the background.
     ReRegisterGamepadsForBackground();
+
+    // Steady-state diagnostics: by now Steam (if it was going to) has injected its
+    // overlay. Re-report the overlay state and which XInput slots survive, so the
+    // log shows whether the second controller is still there for this instance.
+    LogOverlayState("after window setup");
+    LogXInputScan();
     return 0;
 }
 
