@@ -1593,6 +1593,53 @@ static void LogFirstXInputCall(DWORD requestedIndex, DWORD realIndex, DWORD resu
     }
 }
 
+// Logs (a few times, rate-limited) whenever the forwarded controller actually
+// reports button/stick activity. This is how we tell whether real input from this
+// instance's assigned pad reaches the game at all: if the player mashes their pad
+// and nothing logs here, the assigned XInput slot is a phantom (no real device or a
+// wireless dropout); if it logs but the game still doesn't move, the game is
+// dropping the input itself (focus/background handling), not the proxy.
+static void LogPadActivity(DWORD realIndex, DWORD result, const XINPUT_STATE* st)
+{
+    if (result != ERROR_SUCCESS || st == NULL)
+    {
+        return;
+    }
+
+    const XINPUT_GAMEPAD* g = &st->Gamepad;
+    bool active = g->wButtons != 0 ||
+                  g->bLeftTrigger > 40 || g->bRightTrigger > 40 ||
+                  g->sThumbLX > 12000 || g->sThumbLX < -12000 ||
+                  g->sThumbLY > 12000 || g->sThumbLY < -12000 ||
+                  g->sThumbRX > 12000 || g->sThumbRX < -12000 ||
+                  g->sThumbRY > 12000 || g->sThumbRY < -12000;
+    if (!active)
+    {
+        return;
+    }
+
+    static volatile LONG count = 0;
+    static ULONGLONG lastLog = 0;
+    if (count >= 15)
+    {
+        return; // enough evidence; don't spam the log forever.
+    }
+    ULONGLONG now = GetTickCount64();
+    if (now - lastLog < 400)
+    {
+        return;
+    }
+    lastLog = now;
+    InterlockedIncrement(&count);
+
+    char m[200];
+    sprintf_s(m, sizeof(m),
+              "xinput activity: real slot %lu buttons=0x%04X LT=%u RT=%u LX=%d LY=%d RX=%d RY=%d",
+              realIndex, g->wButtons, g->bLeftTrigger, g->bRightTrigger,
+              g->sThumbLX, g->sThumbLY, g->sThumbRX, g->sThumbRY);
+    ProxyLog(m);
+}
+
 DWORD WINAPI XInputGetState(DWORD dwUserIndex, XINPUT_STATE* pState)
 {
     EnsureInit();
@@ -1604,6 +1651,7 @@ DWORD WINAPI XInputGetState(DWORD dwUserIndex, XINPUT_STATE* pState)
     }
     DWORD r = p_GetState(real, pState);
     LogFirstXInputCall(dwUserIndex, real, r);
+    LogPadActivity(real, r, pState);
     return r;
 }
 
@@ -1621,12 +1669,14 @@ DWORD WINAPI XInputGetStateEx(DWORD dwUserIndex, XINPUT_STATE* pState)
     {
         DWORD r = p_GetStateEx(real, pState);
         LogFirstXInputCall(dwUserIndex, real, r);
+        LogPadActivity(real, r, pState);
         return r;
     }
     if (p_GetState != NULL)
     {
         DWORD r = p_GetState(real, pState);
         LogFirstXInputCall(dwUserIndex, real, r);
+        LogPadActivity(real, r, pState);
         return r;
     }
     return ERROR_DEVICE_NOT_CONNECTED;
