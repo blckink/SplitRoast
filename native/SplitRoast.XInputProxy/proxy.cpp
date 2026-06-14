@@ -72,6 +72,15 @@ static bool    g_hasWindowTarget = false;
 static HWND    g_hookedWnd = NULL;
 static WNDPROC g_origProc = NULL;
 
+// Opt-in (SPLITROAST_AGGRESSIVE_INPUT=1) for the heavy-handed isolation hooks that
+// can destabilise some engines (notably Unity 6 / new Input System): blocking the
+// game's HID CreateFile opens, blocking Windows.Gaming.Input activation, and
+// blocking the Steam overlay's LoadLibrary. The default-on baseline (XInput
+// forwarding, RawInput registration filter, focus/background spoof, window pin) is
+// enough to isolate input without touching these, so they stay OFF unless a game
+// is known to need them.
+static bool    g_aggressiveInput = false;
+
 static void AssignRawDevice();
 static void InstallRawInputHooks();
 
@@ -188,6 +197,16 @@ static void EnsureInit()
 
     // Optional: a file the launcher updates with the live XInput slot to follow.
     GetEnvironmentVariableA("SPLITROAST_PAD_FILE", g_padFile, sizeof(g_padFile));
+
+    // Optional: opt in to the aggressive isolation hooks (off by default; they can
+    // crash Unity 6 titles when their input system enumerates gamepads).
+    {
+        char b[8] = { 0 };
+        if (GetEnvironmentVariableA("SPLITROAST_AGGRESSIVE_INPUT", b, sizeof(b)) > 0 && b[0] == '1')
+        {
+            g_aggressiveInput = true;
+        }
+    }
 
     // Optional: the split region this instance's window must stay pinned to.
     {
@@ -1264,7 +1283,7 @@ static void InstallRawInputHooks()
     // Block direct HID opens of foreign gamepads (kernel32!CreateFile).
     int hidHooks = 0;
     HMODULE k32 = GetModuleHandleA("kernel32.dll");
-    if (k32 != NULL)
+    if (g_aggressiveInput && k32 != NULL)
     {
         void* pcw = (void*)GetProcAddress(k32, "CreateFileW");
         void* pca = (void*)GetProcAddress(k32, "CreateFileA");
@@ -1277,7 +1296,7 @@ static void InstallRawInputHooks()
     // Block the Steam overlay (kernel32!LoadLibrary*) from loading, so it can't
     // inject its XInput hook and let Steam Input swallow the second controller.
     int overlayHooks = 0;
-    if (k32 != NULL)
+    if (g_aggressiveInput && k32 != NULL)
     {
         struct { const char* name; void* detour; void** orig; } ll[] = {
             { "LoadLibraryW",   (void*)My_LoadLibraryW,   (void**)&o_LoadLibraryW },
@@ -1297,8 +1316,8 @@ static void InstallRawInputHooks()
 
     // Block Windows Gaming Input (combase!RoGetActivationFactory).
     int wgiHooks = 0;
-    HMODULE combase = GetModuleHandleA("combase.dll");
-    if (combase == NULL)
+    HMODULE combase = g_aggressiveInput ? GetModuleHandleA("combase.dll") : NULL;
+    if (g_aggressiveInput && combase == NULL)
     {
         combase = LoadLibraryA("combase.dll");
     }
@@ -1333,10 +1352,11 @@ static void InstallRawInputHooks()
         }
     }
 
-    char msg[220];
+    char msg[260];
     sprintf_s(msg, sizeof(msg),
-              "rawinput: inline hooks installed (data %d/2, msgpump %d/4, hid %d/2, wgi %d/1, bg %d/5, overlayblock %d/4)",
-              installed, msgHooks, hidHooks, wgiHooks, bgHooks, overlayHooks);
+              "rawinput: inline hooks installed (data %d/2, msgpump %d/4, hid %d/2, wgi %d/1, bg %d/5, overlayblock %d/4)%s",
+              installed, msgHooks, hidHooks, wgiHooks, bgHooks, overlayHooks,
+              g_aggressiveInput ? " [aggressive input ON]" : " [aggressive input OFF - safe baseline]");
     ProxyLog(msg);
 }
 
