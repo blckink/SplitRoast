@@ -162,6 +162,11 @@ public sealed class RealLaunchEngine : ILaunchEngine
         diag.Log($"Analysis: exe='{exePath ?? "(none)"}', arch={arch}, engine={recipe?.Engine.ToString() ?? "n/a"}, " +
                  $"sdks={recipe?.DetectedSdks.ToString() ?? "n/a"}, steamDrm={recipe?.HasSteamDrm == true}, " +
                  $"wantsEmulator={wantsEmulator}, emulatorReady={emulatorReady}.");
+        if (recipe is not null)
+        {
+            diag.Log($"Detected technologies: {recipe.DetectedTech}" +
+                     $"{(recipe.HasInGameNetworking ? " (in-game networking: pairs over localhost host+join)" : "")}.");
+        }
 
         // Surface online SDKs we detect but can't yet emulate, so the diagnostics
         // explain why such a game may not pair up rather than failing silently.

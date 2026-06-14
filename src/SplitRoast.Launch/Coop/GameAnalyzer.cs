@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
@@ -17,6 +18,7 @@ public static class GameAnalyzer
         (string? api64, string? api32) = FindSteamApi(installDir);
         bool hasSteamDrm = SteamStubDetector.IsSteamDrmProtected(exePath);
         OnlineSdk sdks = DetectOnlineSdks(installDir, api64, api32);
+        GameTechnology tech = DetectTechnologies(installDir, engine, sdks);
 
         return new CoopRecipe
         {
@@ -27,6 +29,7 @@ public static class GameAnalyzer
             SteamApi64RelPath = api64,
             SteamApi32RelPath = api32,
             DetectedSdks = sdks,
+            DetectedTech = tech,
             HasSteamDrm = hasSteamDrm
         };
     }
@@ -113,6 +116,79 @@ public static class GameAnalyzer
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Builds the game's "detected technologies" set from one pass over the install
+    /// folder - the local, no-network analogue of SteamDB's tech list. Drives launch
+    /// strategy (engine quirks, scripting backend, in-game networking vs. emulator)
+    /// with no per-game handler. Whatever we cannot positively identify is simply
+    /// left unset rather than guessed.
+    /// </summary>
+    private static GameTechnology DetectTechnologies(string installDir, EngineType engine, OnlineSdk sdks)
+    {
+        GameTechnology tech = GameTechnology.None;
+
+        // Carry over what the engine/SDK passes already established.
+        if (engine == EngineType.Unity) { tech |= GameTechnology.UnityEngine; }
+        if (engine == EngineType.Unreal) { tech |= GameTechnology.UnrealEngine; }
+        if (sdks.HasFlag(OnlineSdk.Steam)) { tech |= GameTechnology.SteamworksSdk; }
+        if (sdks.HasFlag(OnlineSdk.Epic)) { tech |= GameTechnology.EpicOnlineServices; }
+        if (sdks.HasFlag(OnlineSdk.Galaxy)) { tech |= GameTechnology.GogGalaxy; }
+
+        // One depth-limited sweep; match by lowercase file name. Managed assemblies
+        // live a few levels down (e.g. <Game>_Data/Managed), hence depth 5.
+        HashSet<string> names = EnumerateFileNames(installDir, maxDepth: 5);
+
+        bool Has(string name) => names.Contains(name);
+        bool HasPrefix(string prefix) => names.Any(n => n.StartsWith(prefix, StringComparison.Ordinal));
+
+        // Scripting backend (Unity).
+        if (Has("gameassembly.dll")) { tech |= GameTechnology.Il2Cpp; }
+        if (Has("assembly-csharp.dll") || HasPrefix("mono-")) { tech |= GameTechnology.Mono; }
+
+        // Godot ships a .pck pack next to the runner.
+        if (HasPrefix("godot") || names.Any(n => n.EndsWith(".pck", StringComparison.Ordinal)))
+        {
+            tech |= GameTechnology.GodotEngine;
+        }
+
+        // Platform SDKs that may only appear as managed wrappers.
+        if (Has("steamworks.net.dll") || Has("facepunch.steamworks.dll")) { tech |= GameTechnology.SteamworksSdk; }
+
+        // In-game networking middleware (these connect by IP -> localhost co-op).
+        if (Has("fishnet.runtime.dll") || HasPrefix("fishnet")) { tech |= GameTechnology.FishNet; }
+        if (Has("mirror.dll") || HasPrefix("mirror.")) { tech |= GameTechnology.Mirror; }
+        if (HasPrefix("photon")) { tech |= GameTechnology.Photon; }
+        if (HasPrefix("unity.netcode")) { tech |= GameTechnology.NetcodeForGameObjects; }
+
+        return tech;
+    }
+
+    /// <summary>Collects lowercase file names under <paramref name="root"/> once.</summary>
+    private static HashSet<string> EnumerateFileNames(string root, int maxDepth)
+    {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        var options = new EnumerationOptions
+        {
+            RecurseSubdirectories = true,
+            MaxRecursionDepth = maxDepth,
+            IgnoreInaccessible = true
+        };
+
+        try
+        {
+            foreach (string file in Directory.EnumerateFiles(root, "*", options))
+            {
+                names.Add(Path.GetFileName(file).ToLowerInvariant());
+            }
+        }
+        catch (IOException)
+        {
+            // Partial detection is fine; never let a quirky folder abort analysis.
+        }
+
+        return names;
     }
 
     private static string? FindFirstRelative(string root, string fileName)

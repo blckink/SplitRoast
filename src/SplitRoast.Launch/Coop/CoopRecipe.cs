@@ -35,6 +35,23 @@ public sealed class CoopRecipe
     public OnlineSdk DetectedSdks { get; init; } = OnlineSdk.None;
 
     /// <summary>
+    /// The full technology stack detected for the game (engine, scripting backend,
+    /// platform SDKs and in-game networking middleware) - the local equivalent of
+    /// SteamDB's "Detected Technologies". Lets the engine pick a strategy with no
+    /// per-game handler.
+    /// </summary>
+    public GameTechnology DetectedTech { get; init; } = GameTechnology.None;
+
+    /// <summary>
+    /// True if the game carries its own IP-based networking middleware
+    /// (FishNet/Mirror/Photon/Netcode). Those pair two local copies over localhost
+    /// host+join, so the platform emulator is only needed for identity, not relay.
+    /// </summary>
+    public bool HasInGameNetworking =>
+        (DetectedTech & (GameTechnology.FishNet | GameTechnology.Mirror |
+                         GameTechnology.Photon | GameTechnology.NetcodeForGameObjects)) != 0;
+
+    /// <summary>
     /// True if the executable is wrapped with Steam DRM (the SteamStub). These
     /// games need the Steam client running before launch, otherwise the stub
     /// relaunches them through Steam and the copy we started exits.
