@@ -75,7 +75,10 @@
 
         <!-- Page heading + suitability legend -->
         <StackPanel Grid.Row="0" Margin="9,0,0,16">
-            <TextBlock Text="My Games" Style="{StaticResource PageTitleStyle}" />
+            <TextBlock Text="Installed Steam games" Style="{StaticResource PageTitleStyle}" />
+            <TextBlock Text="Games found in your local Steam library on this PC."
+                       Margin="0,4,0,0" FontSize="13"
+                       Foreground="{StaticResource TextSecondaryBrush}" />
             <WrapPanel Margin="0,10,0,0">
                 <WrapPanel.Resources>
                     <Style TargetType="TextBlock">

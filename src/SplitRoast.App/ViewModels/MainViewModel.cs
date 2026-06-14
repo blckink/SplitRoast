@@ -20,12 +20,14 @@ public sealed class MainViewModel : ObservableObject, IShellNavigator
 {
     // Section keys, used to highlight the active top-bar item.
     public const string SectionGames = "Games";
+    public const string SectionDiscover = "Discover";
     public const string SectionControls = "Controls";
     public const string SectionSettings = "Settings";
 
     private readonly IServiceProvider _services;
 
     private GamesViewModel? _games;
+    private DiscoverViewModel? _discover;
     private ControlsViewModel? _controls;
     private SettingsViewModel? _settings;
     private GameDetailViewModel? _activeDetail;
@@ -38,11 +40,14 @@ public sealed class MainViewModel : ObservableObject, IShellNavigator
         _services = services;
 
         ShowGamesCommand = new RelayCommand(NavigateToGames);
+        ShowDiscoverCommand = new RelayCommand(NavigateToDiscover);
         ShowControlsCommand = new RelayCommand(NavigateToControls);
         ShowSettingsCommand = new RelayCommand(NavigateToSettings);
     }
 
     public RelayCommand ShowGamesCommand { get; }
+
+    public RelayCommand ShowDiscoverCommand { get; }
 
     public RelayCommand ShowControlsCommand { get; }
 
@@ -50,6 +55,7 @@ public sealed class MainViewModel : ObservableObject, IShellNavigator
 
     // Lazily-resolved persistent pages (singletons in the container).
     private GamesViewModel Games => _games ??= _services.GetRequiredService<GamesViewModel>();
+    private DiscoverViewModel Discover => _discover ??= _services.GetRequiredService<DiscoverViewModel>();
     private ControlsViewModel Controls => _controls ??= _services.GetRequiredService<ControlsViewModel>();
     private SettingsViewModel Settings => _settings ??= _services.GetRequiredService<SettingsViewModel>();
 
@@ -75,6 +81,7 @@ public sealed class MainViewModel : ObservableObject, IShellNavigator
             if (SetProperty(ref _activeSection, value))
             {
                 OnPropertyChanged(nameof(IsGamesActive));
+                OnPropertyChanged(nameof(IsDiscoverActive));
                 OnPropertyChanged(nameof(IsControlsActive));
                 OnPropertyChanged(nameof(IsSettingsActive));
             }
@@ -82,6 +89,7 @@ public sealed class MainViewModel : ObservableObject, IShellNavigator
     }
 
     public bool IsGamesActive => ActiveSection == SectionGames;
+    public bool IsDiscoverActive => ActiveSection == SectionDiscover;
     public bool IsControlsActive => ActiveSection == SectionControls;
     public bool IsSettingsActive => ActiveSection == SectionSettings;
 
@@ -113,6 +121,14 @@ public sealed class MainViewModel : ObservableObject, IShellNavigator
         DetachActiveDetail();
         CurrentPage = Games;
         ActiveSection = SectionGames;
+    }
+
+    public async void NavigateToDiscover()
+    {
+        DetachActiveDetail();
+        CurrentPage = Discover;
+        ActiveSection = SectionDiscover;
+        await Discover.EnsureLoadedAsync();
     }
 
     public async void NavigateToGameDetail(SteamGame game)
